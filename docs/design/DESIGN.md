@@ -6,9 +6,12 @@
 > 配套文件：
 > - [`prototype.html`](./prototype.html) — 可交互设计稿 v0.2（浏览器直接打开，无依赖）
 > - [`check.mjs`](./check.mjs) — 静态自检脚本（令牌 / i18n / 禁止项 / 字体 / 图标 / 数据量级）
+> - [`measure-design.mjs`](./measure-design.mjs) — 量设计稿的布局溢出（`npm run measure:design`）
 > - [`embed-icons.mjs`](./embed-icons.mjs) — 把用到的图标 symbol 子集内联进设计稿
 > - [`build-icons.mjs`](./build-icons.mjs) — 从 reicon 抓取生成完整 sprite
+> - [`extract-icons.mjs`](./extract-icons.mjs) — 把设计稿的 sprite 抽成 renderer 用的 TS 模块（`npm run icons`）
 > - [`preview/`](./preview) — 渲染截图
+> - [`archive/`](./archive) — 旧设计稿与一次性修复脚本
 >
 > 更新日期：2026-09-11（v0.2：字号 12.5px，图标 sprite，汇总条 / 文件树 / 可排序面板）
 

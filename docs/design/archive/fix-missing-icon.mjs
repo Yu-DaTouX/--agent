@@ -7,9 +7,14 @@
  *
  * 这个脚本把 HEAD 版本 sprite.ts 里的 i-settings 取回，写进 prototype.html。
  * 幂等：已经有了就跳过。
+ *
+ * ⚠️ 一次性修复，已执行完毕（prototype.html 里那段 symbol 已就位）——
+ *    留在 archive/ 里是为了记录这次事故，平时不需要跑。
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const head = execSync('git show HEAD:src/renderer/src/icons/sprite.ts', {
   encoding: 'utf8',
@@ -30,7 +35,7 @@ if (!sm) {
   process.exit(1)
 }
 
-const P = 'docs/design/prototype.html'
+const P = join(dirname(fileURLToPath(import.meta.url)), '..', 'prototype.html')
 let html = readFileSync(P, 'utf8')
 if (html.includes('id="i-settings"')) {
   console.log('• i-settings 已存在，跳过')

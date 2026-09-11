@@ -1,7 +1,7 @@
 # 交接文档 · pi desktop
 
 > **给新会话的第一个指令**（直接复制粘贴的版本在 [`NEXT-SESSION.md`](NEXT-SESSION.md)）：
-> `读 %USERPROFILE%\Desktop\pi-desktop\HANDOFF.md，然后继续。`
+> `读 %USERPROFILE%\Desktop\pi-desktop\docs\dev\HANDOFF.md，然后继续。`
 >
 > 最后更新：2026-09-11（**第 9 版：Win11 标题栏 / 模型生成标题 / Codex 风格选择器 / 终端风格强化**）
 >
@@ -170,25 +170,39 @@ pi 设计上**无权限弹窗、写入立即落盘**（`docs/usage.md:309`）。
 │   ├── main\
 │   │   ├── index.ts         窗口 + IPC + 生命周期（含稳定退出）
 │   │   ├── protocol.ts  ⭐ 手写 pi RPC 客户端（JSONL / 请求关联 / 扩展 UI）
+│   │   │                       并负责**定位 pi**（内置运行时 → 全局 → PATH）
 │   │   ├── agent.ts     ⭐ 协议 → UI 归一化（唯一认识 pi 协议的地方）
-│   │   ├── memory.ts        记忆存储 + 认识论规则 + soul.md 只读读
+│   │   ├── normalize.ts     归一化的纯函数部分（拆出来供 session-reader 复用）
+│   │   ├── session-reader.ts 直读 JSONL（大会话打开 486ms，不走 pi RPC）
+│   │   ├── memory.ts        记忆存储 + 认识论规则 + soul.md 只读
 │   │   ├── sessions.ts      会话列表（只读扫描 sessions/*.jsonl）
+│   │   ├── credentials.ts    模型接入（读写 pi 的 auth.json）
+│   │   ├── title.ts         用独立 RPC 进程总结会话标题
 │   │   └── settings.ts      桌面端设置（不碰 pi 的 settings.json）
 │   ├── preload\index.ts     contextBridge 白名单（形态由 YanBridge 约束）
 │   ├── shared\ipc.ts        共享类型 + MainPush（已归一化的 UI 补丁）
 │   └── renderer\src\
 │       ├── state\store.ts   zustand：只负责套用 MainPush
-│       ├── components\       TitleBar Rail Continuity Message Composer
-│       │                    MemoryPanel UiBridge
-│       ├── styles\          tokens app stage1 electron highlight
+│       ├── components\        TitleBar Rail Continuity Message Composer
+│       │                    MemoryPanel UiBridge EmptyStream Onboarding AuthTab …
+│       ├── styles\          tokens app stage1 stage2 redesign settings electron highlight
 │       └── i18n\            中英双语，类型安全
-├── resources\pi\yan-memory.ts   ⭐ 注入给 pi 的记忆扩展
-└── scripts\
-    ├── probe-pi.mjs         单独验证「pi 能否被找到并启动」
-    ├── probe\*.js           在真实应用里跑的 DOM/交互断言（live/memory/sessions/e2e）
-    ├── test-live.mjs        跑上面这些场景
-    ├── shot.mjs             用裸 BrowserWindow 截图（改 UI 时用）
-    └── extract-icons.mjs / setup-font.mjs
+├── resources\
+│   ├── pi\yan-memory.ts     ⭐ 注入给 pi 的记忆扩展
+│   └── pi-runtime\          ⭐ 内置 pi 运行时（生成物，不入库；npm run vendor:pi）
+├── scripts\                 项目工具（纯应用侧）
+│   ├── probe-pi.mjs         单独验证「pi 能否被找到并启动」
+│   ├── probe\*.js           在真实应用里跑的 DOM/交互断言（live/memory/sessions/e2e…）
+│   ├── test-live.mjs        跑上面这些场景
+│   ├── test-unit.mjs        纯逻辑单测（吸附 test-turns.mjs）
+│   ├── test-turns.mjs       回合分组 / 段落拆分 / 缓存命中率
+│   ├── lint-css.mjs         拦裸 1fr（这个坑出现过 3 次）
+│   ├── vendor-pi.mjs        抽取内置 pi 运行时
+│   └── shot.mjs             截图
+├── docs\
+│   ├── dev\                 HANDOFF.md / NEXT-SESSION.md（开发过程文档）
+│   └── design\              设计稿与设计工具（prototype.html / check.mjs / icons…）
+└── 根目录                    README.md / LICENSE / package.json / tsconfig* / electron.vite.config.ts
 ```
 
 **验证结果（实测）：**
@@ -211,14 +225,18 @@ pi 设计上**无权限弹窗、写入立即落盘**（`docs/usage.md:309`）。
 
 ```
 %USERPROFILE%\Desktop\pi-desktop\
-├── HANDOFF.md                       ← 本文件
-├── NEXT-SESSION.md                  ← 新会话开场指令（可直接复制）
+├── docs\dev\                        ← 开发过程文档（HANDOFF / NEXT-SESSION 已移到这里）
+│   ├── HANDOFF.md                    ← 交接文档（本文件）
+│   └── NEXT-SESSION.md               ← 新会话开场指令（可直接复制）
 └── docs\design\
     ├── prototype.html               ← 可交互设计稿 v0.2（112KB，浏览器直接打开）
     ├── DESIGN.md                    ← 设计规范（令牌真源，已到 v0.2）
     ├── check.mjs                    ← 静态自检（9 类，零成本）
+    ├── measure-design.mjs           ← 量设计稿溢出（npm run measure:design）
     ├── embed-icons.mjs               ← 把用到的图标 symbol 子集内联进设计稿
-    ├── build-icons.mjs              ← 图标抓取 + 生成（可重跑）
+    ├── build-icons.mjs              ← 图标抓取 + 生成（可重跑，从 reicon 拉）
+    ├── extract-icons.mjs            ← 设计稿 sprite → renderer 的 TS 模块（npm run icons）
+    ├── archive\                     ← 旧设计稿（v0.2 编码版）与一次性修复脚本
     ├── icons\                       ← reicon 图标集（已生成）
     │   ├── reicon.svg               ← 239KB 完整 sprite，166 个 symbol
     │   ├── icons.ts / icons.json    ← 名称 ↔ symbol id 映射
@@ -229,14 +247,12 @@ pi 设计上**无权限弹窗、写入立即落盘**（`docs/usage.md:309`）。
     │   ├── fonts.html               ← 三字体逐字测宽对比
     │   ├── maple-size.html          ← Maple 四档字号对比
     │   ├── compare.png / msize.png
-    │   └── MapleMono-CN-Regular.ttf ← 17.7MB，已 gitignore
-    └── preview\                     ← 渲染截图
-        ├── v02-1440x900.png         ← 当前主图
-        ├── v02-1920x900.png
-        ├── v02-1100x780.png
-        ├── fontsize-compare.png     ← 12px vs 12.5px 决策依据
-        ├── fontsize-a-12px.png
-        └── fontsize-b-125px.png
+    │   └── MapleMono-CN-Regular.ttf ← 18MB，已 gitignore
+    └── preview\                     ← 渲染截图（⚠️ 文件名后来随 UI 重做换过，以实际为准）
+        ├── ui-live.png / ui-settings.png   ← README 用的两张
+        ├── yan-app-*.png                   ← 设计稿渲染
+        ├── yan-live-*.png                  ← 真实对话截图
+        └── redesign-before/after.png       ← 一次 UI 重做的前后对比
 ```
 
 **设计稿状态：v0.2 已完成。用户 8 条意见全部落实，`check.mjs` 全绿，已逐张目视校验。**

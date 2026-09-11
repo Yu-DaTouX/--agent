@@ -11,8 +11,10 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const SRC = join(root, 'docs/design/prototype.html')
+const HERE = dirname(fileURLToPath(import.meta.url))
+// 本文件在 docs/design/ 下，仓库根在两级之上
+const root = join(HERE, '..', '..')
+const SRC = join(HERE, 'prototype.html')
 const OUT = join(root, 'src/renderer/src/icons/sprite.ts')
 
 const html = await readFile(SRC, 'utf8')

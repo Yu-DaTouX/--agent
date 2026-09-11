@@ -3,7 +3,7 @@
 > 直接复制下面整个代码块粘贴到新会话。
 
 ```
-读 %USERPROFILE%\Desktop\pi-desktop\HANDOFF.md，然后继续。
+读 %USERPROFILE%\Desktop\pi-desktop\docs\dev\HANDOFF.md，然后继续。
 
 当前状态：**功能完整，可日常使用；pi 已内置，发布只差 electron-builder**。
   · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程

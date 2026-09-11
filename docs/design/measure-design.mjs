@@ -5,14 +5,24 @@
  * 但更可能是同一个根因 —— 容器内容比容器宽，溢出的部分被右邻的
  * 不透明列盖住了。肉眼只能看到「被遮挡」，量一下就知道宽了多少。
  *
- * 用法： npx electron scripts/measure-design.mjs
+ * 用法： npx electron docs/design/measure-design.mjs
+ */
+/**
+ * 量设计稿（prototype.html）的布局溢出。
+ *
+ * 为什么需要它：截图里「12m 被遮住」「新对话按钮边框不见」看着像两个 bug，
+ * 但更可能是同一个根因 —— 容器内容比容器宽，溢出的部分被右邻的
+ * 不透明列盖住了。肉眼只能看到「被遮挡」，量一下就知道宽了多少。
+ *
+ * 用法： npm run measure:design
+ *       （或 npx electron docs/design/measure-design.mjs）
  */
 import { app, BrowserWindow } from 'electron'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const FILE = resolve(root, 'docs/design/prototype.html')
+const HERE = dirname(fileURLToPath(import.meta.url))
+const FILE = resolve(HERE, 'prototype.html')
 
 async function main() {
   await app.whenReady()
