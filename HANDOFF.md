@@ -1,7 +1,7 @@
 # 交接文档 · pi desktop
 
 > **给新会话的第一个指令**（直接复制粘贴的版本在 [`NEXT-SESSION.md`](NEXT-SESSION.md)）：
-> `读 C:\Users\YuDaTou\Desktop\pi-desktop\HANDOFF.md，然后继续。`
+> `读 %USERPROFILE%\Desktop\pi-desktop\HANDOFF.md，然后继续。`
 >
 > 最后更新：2026-09-11（**第 9 版：Win11 标题栏 / 模型生成标题 / Codex 风格选择器 / 终端风格强化**）
 >
@@ -165,7 +165,7 @@ pi 设计上**无权限弹窗、写入立即落盘**（`docs/usage.md:309`）。
 ### 3.0 应用代码（**阶段 1 已完成 —— 可用**，2026-09-11）
 
 ```
-C:\Users\YuDaTou\Desktop\pi-desktop\
+%USERPROFILE%\Desktop\pi-desktop\
 ├── src\
 │   ├── main\
 │   │   ├── index.ts         窗口 + IPC + 生命周期（含稳定退出）
@@ -210,7 +210,7 @@ C:\Users\YuDaTou\Desktop\pi-desktop\
 ### 3.1 设计稿
 
 ```
-C:\Users\YuDaTou\Desktop\pi-desktop\
+%USERPROFILE%\Desktop\pi-desktop\
 ├── HANDOFF.md                       ← 本文件
 ├── NEXT-SESSION.md                  ← 新会话开场指令（可直接复制）
 └── docs\design\
@@ -290,7 +290,7 @@ C:\Users\YuDaTou\Desktop\pi-desktop\
 | 项 | 值 |
 |---|---|
 | 版本 | 0.85.1 |
-| 路径 | `C:\Users\YuDaTou\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent` |
+| 路径 | `%USERPROFILE%\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent` |
 | 许可证 | **MIT** → 可以打包分发，保留版权声明 |
 | 体积 | 424 MB（`node_modules` 401MB，其中 `@esbuild` **284MB**） |
 | `dist/bundle` | **7.7 MB**，但实测**仍需外部依赖**（报缺 `@earendil-works/chord`） |
@@ -450,7 +450,7 @@ node ~/.pi/agent/.dev/sync-model-context.mjs --write --verify
 ### 静态检查（零成本，每次都跑）
 
 ```bash
-node C:\Users\YuDaTou\Desktop\pi-desktop\docs\design\check.mjs <设计稿路径>
+node %USERPROFILE%\Desktop\pi-desktop\docs\design\check.mjs <设计稿路径>
 ```
 
 ### 截图
@@ -759,18 +759,18 @@ pi --mode rpc  ×N（一个会话一个进程）
 ## 11. 关键路径速查
 
 ```
-pi 包        C:\Users\YuDaTou\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent
-pi 配置      C:\Users\YuDaTou\.pi\agent
-pi 会话      C:\Users\YuDaTou\.pi\agent\sessions\--C--Users-YuDaTou--\*.jsonl
-pi 扩展      C:\Users\YuDaTou\.pi\agent\extensions\left-info-panel.ts
-pi fork      C:\Users\YuDaTou\.pi\fork\   （侧栏 fork，README.md 在里）
-项目         C:\Users\YuDaTou\Desktop\pi-desktop\
+pi 包        %USERPROFILE%\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent
+pi 配置      %USERPROFILE%\.pi\agent
+pi 会话      %USERPROFILE%\.pi\agent\sessions\--C--Users-Name--\*.jsonl
+pi 扩展      %USERPROFILE%\.pi\agent\extensions\left-info-panel.ts
+pi fork      %USERPROFILE%\.pi\fork\   （侧栏 fork，README.md 在里）
+项目         %USERPROFILE%\Desktop\pi-desktop\
 RPC 文档     <pi包>\docs\rpc.md
 扩展文档     <pi包>\docs\extensions.md
 边缘浏览器   C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
 临时工具     %TEMP%\see.mjs（视觉校验）、%TEMP%\mkhtml.mjs（图片裁剪）
-模型同步     C:\Users\YuDaTou\.pi\agent\.dev\sync-model-context.mjs
-模型配置     C:\Users\YuDaTou\.pi\agent\models.json（备份 .bak）
+模型同步     %USERPROFILE%\.pi\agent\.dev\sync-model-context.mjs
+模型配置     %USERPROFILE%\.pi\agent\models.json（备份 .bak）
 ```
 
 ### RPC 事实
@@ -792,7 +792,7 @@ RPC 文档     <pi包>\docs\rpc.md
 ### 侧栏 fork（独立项目，已完成）
 
 ```
-C:\Users\YuDaTou\.pi\fork\
+%USERPROFILE%\.pi\fork\
 ├── README.md            用法与限制
 ├── setup-fork.mjs       一键重建（复制 + junction + 打补丁）
 ├── apply-patches.mjs    幂等补丁器（10 处补丁 + 1 新文件）

@@ -47,6 +47,16 @@
 --font-ui: var(--font-mono);
 ```
 
+> **实施状态（已落地）**：不再自带字体文件。改为 npm 依赖
+> [`@mogeko/maple-mono-cn`](https://www.npmjs.com/package/@mogeko/maple-mono-cn)
+> （Maple Mono CN 的 `cn-font-split` 重打包：239 个 woff2 分片 + `unicode-range`，
+> 共 9.7MB，而**实际只加载当前用到的几个分片**）。
+> 字号与栅格指标与原全量 TTF **完全一致**（12.5px 下汉字格 15.000px、
+> 拉丁列 7.500px、比值 2.000，有 `npm run shot` 与 live 场景验证）。
+> 这样 `npm install` 就位，不再需要单独的 `npm run font` 步骤 ——
+> 而那个步骤原本会因为字体源文件也不入库而**让新克隆的仓库直接跑不起来**。
+> 授权：字体 SIL OFL 1.1，打包 MIT，均可随软件分发。
+
 **必须内嵌字体，不能靠系统回退。** 原因：
 
 终端风格 UI 的命门是**栅格对齐** —— 一个汉字必须正好占两个 ASCII 字符宽，

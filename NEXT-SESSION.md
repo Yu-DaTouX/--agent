@@ -3,7 +3,7 @@
 > 直接复制下面整个代码块粘贴到新会话。
 
 ```
-读 C:\Users\YuDaTou\Desktop\pi-desktop\HANDOFF.md，然后继续。
+读 %USERPROFILE%\Desktop\pi-desktop\HANDOFF.md，然后继续。
 
 当前状态：**阶段 1 + 2 已完成 —— 功能齐了，可以日常用**。
   · Electron + Vite + React 19 + TS，真连 `pi --mode rpc` 子进程
@@ -16,7 +16,7 @@
   · 验证：npm run check 全绿（单元 19 条 + 真实应用 4 场景）
 
 常用命令：
-  npm run dev                                    开发（新克隆先跑一次 npm run font）
+  npm run dev                                    开发（npm install 即可，字体是 npm 依赖）
   npm run check                                  提交前跑：typecheck + build + 单元 + 真实应用验收
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
