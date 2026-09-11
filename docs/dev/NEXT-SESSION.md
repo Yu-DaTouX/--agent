@@ -5,8 +5,7 @@
 ```
 读 %USERPROFILE%\Desktop\pi-desktop\docs\dev\HANDOFF.md，然后继续。
 
-当前状态：**功能完整，可日常使用；pi 已内置，发布只差 electron-builder**。
-  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
+当前状态：**功能完整，可日常使用；pi 已内置，发布只差 electron-builder**。  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
   · 对话：流式 / markdown + 高亮 / 工具行（含彩色 diff）/ **回合合并**（一轮 = 一块）
   · 回合内顺序：模型说话 → 工作执行栏 → 回复（用户指定）
   · 输入：文本 / `/` 命令补全 / `@` 文件补全 / `!` 直接跑 shell / 图片（粘贴·拖拽·选文件）
@@ -22,10 +21,12 @@
   · 验证：`npm run check` 全绿（**70 单测 + 15 个真实应用场景**，连跑两轮稳定）
 
 常用命令：
-  npm run dev                                    开发（npm install 即可，字体是 npm 依赖）
+  npm run launch                                 启动（双击 启动-砚.cmd 等价）
+  npm run launch --dev                           开发模式（HMR，等价于双击 开发-砚.cmd）
+  npm run dev                                    同上，直接在终端跑
   npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
   npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
-  npm run check                                  提交前跑：typecheck + build + 单测 + 15 场景
+  npm run check                                  提交前跑：typecheck + build + 单测 + **18 场景**
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
@@ -49,6 +50,16 @@
   · **位置跳转不要用 behavior:'smooth'** —— 会被重渲染取消（见 HANDOFF §8）
   · 探针不要用固定 sleep 等 UI（负载高时不够），用轮询
   · 探针不要按会话**标题**找 fixture（标题会被模型重新生成），按 path 找
+  · 探针**不要假设起始状态**（面板是否展开 / 缩放档 / 引导层是否已关）——
+    必须显式置好再断言。否则「单跑必过、全量才炸」（本项目踩过 3 次）
+  · 量几何（getBoundingClientRect）要**等它稳定**（连读两次相同才算），
+    否则会量到过渡中的中间值
+  · 主进程里**别用异步读盘做热路径**（快捷键等）：
+    setUiScale → patchSettings 是「invalidate → 重读 → 写」的异步链，
+    连续按键会读到写盘前的旧值（表现为「按键丢了」）。用内存里的当前值
+  · **.cmd 文件必须纯 ASCII** —— cmd.exe 按 OEM 代码页读文件，
+    非 ASCII 字节在 `chcp` 生效前就把行解析弄崩（实测整个脚本一行都不执行）。
+    中文一律由 node 打印 + `chcp 65001`
 
 发布前的事：
   A. ✅ **已推 GitHub**：`https://github.com/Yu-DaTouX/--agent`（public）。
@@ -63,11 +74,23 @@
   C. ⏭ **下一步：electron-builder**（把 20MB 运行时做成 extraResources）+ 字体子集化。
   D. 会话树浏览（get_tree 协议有，没做 UI）—— 覆盖度里唯一还值得补的。
 
-我现在要做的下一步是：____（下面三选一，或直接说别的）
+我现在要做的下一步是：____（下面是排队中的事，或直接说别的）
 
-A) electron-builder：把内置 pi 做成 extraResources，出第一个安装包
-B) 补会话树浏览 / 工具开关 / 扩展快捷键
-C) 先用一用，把不顺的地方告诉我（说具体场景，我去改）
+已完成到 2026-09-12：工具栏（文件树 + 日志）/ 用户档案 / 启动器 /
+界面缩放（DPI 取整）/ 面板开关位置与几何对称性。
+
+**排队中（用户已提，尚未开工）：**
+  D) 引导第二步：启动时检查**本地已有 key**（含环境变量配的），
+     并加「我已配好 → 重新检测」按钮
+  E) 左右栏宽度**可拖拽调节**（落盘 + 双击复原）
+  F) 工具栏分区**可拖拽调节顺序**（建议用指针事件，不用 HTML5 DnD）
+  G) **工具库按钮**：分区可收进库 / 从库取回
+     （F 与 G 共用 order + hidden 两份数据；库放工具栏头部）
+
+其余候选：
+  A) electron-builder：把内置 pi 做成 extraResources，出第一个安装包
+  B) 会话树浏览（get_tree 协议有，没做 UI）
+  C) 先用一用，把不顺的地方告诉我（说具体场景）
 ```
 
 ---
