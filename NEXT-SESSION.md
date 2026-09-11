@@ -5,36 +5,59 @@
 ```
 读 %USERPROFILE%\Desktop\pi-desktop\HANDOFF.md，然后继续。
 
-当前状态：**阶段 1 + 2 已完成 —— 功能齐了，可以日常用**。
-  · Electron + Vite + React 19 + TS，真连 `pi --mode rpc` 子进程
-  · 对话：流式 / markdown + 高亮 / bash·read·edit·write 工具卡（含彩色 diff）
-  · 输入：文本 / `/` 斜杠命令补全 / `!` 直接跑 shell（不进模型）/ 图片（粘贴·拖拽·选文件）
+当前状态：**功能完整，可日常使用；发布前的三件事未完（见下）**。
+  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
+  · 对话：流式 / markdown + 高亮 / 工具行（含彩色 diff）/ **回合合并**（一轮 = 一块）
+  · 回合内顺序：模型说话 → 工作执行栏 → 回复（用户指定）
+  · 输入：文本 / `/` 命令补全 / `@` 文件补全 / `!` 直接跑 shell / 图片（粘贴·拖拽·选文件）
+  · **写长文模式**：双击 ↑ 或点拖拽柄进入；Enter 换行、Ctrl+Enter 发送
   · 会话：切换 / 新建 / 重命名 / 复制 / 分叉 / 导出 HTML / 删除
-  · 控制：模型与思考档选择器（69 个模型）/ 上下文压缩 / 自动压缩与重试开关
+  · 控制：模型与思考档选择器 / 压缩 / 自动压缩与重试 / 队列投递模式 / Ctrl+P·Shift+Tab
   · 记忆：agent 只能写「未确认」，只有用户确认过才当事实注入提示词
-  · 性能：长会话虚拟化（240 条只渲染 8 条）
-  · 验证：npm run check 全绿（单元 19 条 + 真实应用 4 场景）
+  · 右栏：常驻状态栏（上下文 / 任务进度条 / 队列 / 扩展 / 环境 / 操作）
+  · 设置：记忆 / **模型接入**（API key + 订阅制引导）/ 外观 / 状态 / 关于
+  · 首次启动有引导（4 条可验证的检查项）
+  · 主题：深浅双套（含代码高亮的深/浅两套配色）
+  · 性能：大会话打开 **486ms**（pi 的 switch_session 要 2780ms，改成直读 JSONL）
+  · 验证：`npm run check` 全绿（**70 单测 + 15 个真实应用场景**，连跑两轮稳定）
 
 常用命令：
   npm run dev                                    开发（npm install 即可，字体是 npm 依赖）
-  npm run check                                  提交前跑：typecheck + build + 单元 + 真实应用验收
+  npm run check                                  提交前跑：typecheck + build + 单测 + 15 场景
+  npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
   YAN_SHOT=x.png YAN_PROMPT='…' npx electron .   真实对话截图
 
-关键约定：
-  · 协议知识只在 src/main/protocol.ts + agent.ts（渲染端只认 MainPush 补丁）
-  · 不 import pi 的内部模块；不用 shell 启动 pi（execPath + ELECTRON_RUN_AS_NODE + 参数数组）
-  · 改设计令牌先改 docs/design/DESIGN.md，再改 src/renderer/src/styles/tokens.css
+关键约定（改代码前先读）：
+  · 协议知识只在 src/main/protocol.ts + normalize.ts + agent.ts
+    （渲染端只认 MainPush 补丁；normalize.ts 单独拆出来是为了让
+     session-reader 能复用它而不产生循环依赖）
+  · 不 import pi 的内部模块；不用 shell 启动 pi
+    （execPath + ELECTRON_RUN_AS_NODE + 参数数组）
+  · 改设计令牌先改 docs/design/DESIGN.md，再改 tokens.css
   · 测试必须跑在**真实应用**里（YAN_PROBE 注入），不要在裸 BrowserWindow 里测
-  · ✅ test:live 已自动隔离（临时 sandbox + 只读拷贝 fixture），不再碰你的
-    sessions / 记忆 / localStorage。排查时可 YAN_TEST_ISOLATED=0 关掉隔离
-  · grid 的 1fr 一律写 minmax(0,1fr)（裸 1fr 会撑破容器且不报错）—— npm run lint:css 会拦
+  · 测试自动隔离：YAN_USER_DATA / YAN_SESSIONS_DIR / YAN_DATA_DIR /
+    **YAN_PI_DIR**（后者护的是 auth.json，里面是真实密钥）
+    排查时可 YAN_TEST_ISOLATED=0 关掉隔离
+  · grid 的 1fr 一律写 minmax(0,1fr)（npm run lint:css 会拦）
+  · **位置跳转不要用 behavior:'smooth'** —— 会被重渲染取消（见 HANDOFF §8）
+  · 探针不要用固定 sleep 等 UI（负载高时不够），用轮询
+  · 探针不要按会话**标题**找 fixture（标题会被模型重新生成），按 path 找
+
+发布前三件事（都卡在需要用户操作）：
+  A. **推 GitHub**：账号 Yu-DaTouX，仓库 pi-desktop —— 还没创建。
+     上次的 token 缺 administration=write（建不了仓库），
+     且 token 已被明文贴出两次，**必须作废重发**。
+     脱敏已做完（18 处个人路径 → %USERPROFILE%）。
+  B. **pi 内置进应用**：三方案待选（当依赖捆绑 +50~80MB /
+     esbuild 打单文件 +5MB / 保持要求全局装）。倾向先试方案 B。
+  C. 会话树浏览（get_tree 协议有，没做 UI）—— 覆盖度里唯一还值得补的。
 
 我现在要做的下一步是：____（下面三选一，或直接说别的）
 
-A) 阶段 3：打包分发（Electron builder + pi 随应用分发 + 字体子集化）—— 唯一阻塞给别人用的
-B) 补剩下的：会话树浏览 / 扩展快捷键映射 / 浅色主题打磨 / 设置面板
+A) 试把 pi 打包进应用（方案 B：esbuild 单文件）
+B) 补会话树浏览 / 工具开关 / 扩展快捷键
 C) 先用一用，把不顺的地方告诉我（说具体场景，我去改）
 ```
 
