@@ -5,7 +5,7 @@
 ```
 读 %USERPROFILE%\Desktop\pi-desktop\HANDOFF.md，然后继续。
 
-当前状态：**功能完整，可日常使用；发布前的三件事未完（见下）**。
+当前状态：**功能完整，可日常使用；pi 已内置，发布只差 electron-builder**。
   · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
   · 对话：流式 / markdown + 高亮 / 工具行（含彩色 diff）/ **回合合并**（一轮 = 一块）
   · 回合内顺序：模型说话 → 工作执行栏 → 回复（用户指定）
@@ -23,6 +23,8 @@
 
 常用命令：
   npm run dev                                    开发（npm install 即可，字体是 npm 依赖）
+  npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
+  npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
   npm run check                                  提交前跑：typecheck + build + 单测 + 15 场景
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
@@ -35,6 +37,9 @@
      session-reader 能复用它而不产生循环依赖）
   · 不 import pi 的内部模块；不用 shell 启动 pi
     （execPath + ELECTRON_RUN_AS_NODE + 参数数组）
+  · 内置 pi 运行时是**生成物**（`npm run vendor:pi` → resources/pi-runtime/），
+    **不要手工改里面的文件**，改抽取脚本；pi 升级后重跑一次
+    （脚本会自校验依赖闭包，漏包就非零退出）
   · 改设计令牌先改 docs/design/DESIGN.md，再改 tokens.css
   · 测试必须跑在**真实应用**里（YAN_PROBE 注入），不要在裸 BrowserWindow 里测
   · 测试自动隔离：YAN_USER_DATA / YAN_SESSIONS_DIR / YAN_DATA_DIR /
@@ -45,18 +50,22 @@
   · 探针不要用固定 sleep 等 UI（负载高时不够），用轮询
   · 探针不要按会话**标题**找 fixture（标题会被模型重新生成），按 path 找
 
-发布前三件事（都卡在需要用户操作）：
-  A. **推 GitHub**：账号 Yu-DaTouX，仓库 pi-desktop —— 还没创建。
-     上次的 token 缺 administration=write（建不了仓库），
-     且 token 已被明文贴出两次，**必须作废重发**。
-     脱敏已做完（18 处个人路径 → %USERPROFILE%）。
-  B. **pi 内置进应用**：三方案待选（当依赖捆绑 +50~80MB /
-     esbuild 打单文件 +5MB / 保持要求全局装）。倾向先试方案 B。
-  C. 会话树浏览（get_tree 协议有，没做 UI）—— 覆盖度里唯一还值得补的。
+发布前的事：
+  A. ✅ **已推 GitHub**：`https://github.com/Yu-DaTouX/--agent`（public）。
+     7 个提交的作者已改绑 `174885674+Yu-DaTouX@users.noreply.github.com`，
+     绿格子已排上（GitHub API 核验 7/7 归属 @Yu-DaTouX）。
+     注意：仓库名以 `--` 开头，命令行里当参数会歧义 —— origin 已配完整 URL，
+     直接 `git push` 即可。旧的 `GITHUB_PAT` 环境变量已失效（401），别再用。
+  B. ✅ **pi 内置完成**：不自己 esbuild 打包（5 条硬边界，见 HANDOFF §10.1），
+     改为搬运 pi 自带的 `dist/bundle` + 6 个最小依赖 = **20MB**
+     （vs 依赖捆绑 424MB）。`npm run vendor:pi` 生成，已入 .gitignore。
+     15/15 场景 + 图片场景（wasm 路径）全部跑在内置 pi 上通过。
+  C. ⏭ **下一步：electron-builder**（把 20MB 运行时做成 extraResources）+ 字体子集化。
+  D. 会话树浏览（get_tree 协议有，没做 UI）—— 覆盖度里唯一还值得补的。
 
 我现在要做的下一步是：____（下面三选一，或直接说别的）
 
-A) 试把 pi 打包进应用（方案 B：esbuild 单文件）
+A) electron-builder：把内置 pi 做成 extraResources，出第一个安装包
 B) 补会话树浏览 / 工具开关 / 扩展快捷键
 C) 先用一用，把不顺的地方告诉我（说具体场景，我去改）
 ```

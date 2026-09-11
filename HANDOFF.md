@@ -769,7 +769,7 @@ pi --mode rpc  ×N（一个会话一个进程）
 
 | # | 问题 | 说明 |
 |---|---|---|
-| 1 | **pi 怎么分发** | `dist/bundle` 不自包含，`@esbuild` 284MB。必须先解决裁剪方案 |
+| 1 | ~~**pi 怎么分发**~~ | ✅ **已解决**：不自己打包，搬运 pi 自带的 `dist/bundle` + 补 6 个最小依赖 = **20MB**。见下方 §10.1 |
 | 2 | **RPC 协议稳定性** | 非公开稳定 API。`docs/rpc.md` 1618 行，47 命令 / 20+ 事件 |
 | 3 | ~~改动审阅流程~~ | ✅ **已定：只做回滚**，见 §1.2 |
 | 4 | 扩展 UI 桥接的完整度 | `select/confirm/input/editor` 需映射成模态框 |
@@ -781,6 +781,53 @@ pi --mode rpc  ×N（一个会话一个进程）
 | 10 | **Q9 工作区「检查状态」** | 保留，但必须说清是**启发式**（从 bash 命令名推），不是真实测试框架集成。**待用户确认** |
 | 11 | **左栏歧义** | ✅ 已按「左栏 = 时间分组（可折叠）+ 选中会话内嵌可折叠任务；右栏中下部 = 文件树」实现，见 DESIGN §3.4 末尾 |
 | 12 | **字号** | ✅ 已定 **12.5px**（代码 12px），依据是汉字格整数像素 + 栅格零偏差 |
+
+---
+
+## 10.1 内置 pi 运行时（已决策：搬运 pi 自带的 bundle）
+
+**结论：不要自己做 esbuild 单文件。** 以下四条是**打包器内联不了**的硬边界，
+pi 官方自己用 esbuild 也打了四道补丁 —— 所以它的 `dist/bundle/` 本身就是
+「打包能做到的极限」，直接搬运它比重造一个更碎、更脆。
+
+| # | 内联不了的东西 | 实证 |
+|---|---|---|
+| ① | **顶层 external 包** | ESM 顶层 `import` 只能留 external。pi 自己把 `@earendil-works/chord` / `typebox` / `undici` 留在外（我的实验：删掉 `node_modules` 直接 `ERR_MODULE_NOT_FOUND: @earendil-works/chord`） |
+| ② | **`.wasm` 二进制** | `@silvia-odwyer/photon-node`（图片缩放/EXIF）。pi 在 bundle 里写了 `patchPhotonWasmRead()` 去 `process.execPath` 旁边找 `photon_rs_bg.wasm` |
+| ③ | **`worker_threads` 独立文件** | `new Worker(new URL("./image-resize-worker.js", import.meta.url))` —— worker 必须是独立文件，单文件装不下 |
+| ④ | **运行时 `readFileSync` 的资产** | 主题 `dark.json` / `light.json` / export-html 模板 / `clankolas.png`。不是 import，打包器看不见。实测报错 `ENOENT: ...\dist\modes\interactive\theme\dark.json` |
+
+还有第 ⑤ 条（只在加载 `.ts` 扩展时才暴露）：**`jiti`**。bundle 里静态扫不到它，
+是扩展加载器在运行时 `require` 的 —— 我们自己那个 `resources/pi/yan-memory.ts` 就靠它编译。
+
+### 方案
+
+| 项 | 值 |
+|---|---|
+| 抽取脚本 | `scripts/vendor-pi.mjs`（`npm run vendor:pi`） |
+| 产物 | `resources/pi-runtime/`（**已入 .gitignore**，20MB） |
+| 组成 | `dist/bundle` + `dist` 资产 8.1MB；`node_modules` 子集 8.0MB |
+| node_modules 子集 | `@earendil-works/chord` / `typebox` / `undici` / `@silvia-odwyer/photon-node` / `jiti` / `esbuild`（chord 的传递依赖） |
+| 解析 | `src/main/protocol.ts` 的 `bundledRoots()`，优先级：`piBin` 设置 → `YAN_PI_BIN` → **内置运行时** → 全局安装 → PATH shim → shell 兜底 |
+
+对比三个方案：依赖捆绑 **424MB** ／ esbuild 单文件（**不可行**，上面 5 条）／ 内置搬运 **20MB**。
+
+### ⚠️ 维护要点
+
+1. **`vendor-pi.mjs` 会自校验**：扫 bundle 的裸 import，若出现 `MUST_HAVE`/`OPTIONAL` 未覆盖的包就**非零退出**（pi 升级后新增依赖时这一步能拦住）。
+2. 脚本末尾**真跑**一次 `cli.js --version` + 一次 `get_state` RPC 握手 —— 不做「拷贝成功即通过」的假验证。
+3. pi 升级后要重跑 `npm run vendor:pi`。**不要手工改 `resources/pi-runtime/` 里的文件**（下次抽取会被覆盖）。
+4. `@aws-sdk/signature-v4-crt` / `signature-v4a` 在 `OPTIONAL` 里 —— pi 自己也没装，缺失时降级（Bedrock 的 CRT 签名加速）。
+5. **砍掉 `typebox`+`undici` 也能启动**（实测过），但它们是顶层 import，风险在运行时才炸；留着（ +6.2MB）换确定性。
+
+### 验证（本次实测）
+
+| 验证 | 结果 |
+|---|---|
+| `npm run probe-pi` | ✅ 解析到 `resources/pi-runtime/dist/bundle/cli.js`，model=DeepSeek V4.1 Flash |
+| `npm run check` | ✅ **15/15 场景全绿**（全部跑在内置 pi 上，不是用户全局那个） |
+| `npm run test:live -- image` | ✅ 真调模型，模型认出"红色" → **wasm 路径可用** |
+| 扩展加载（jiti） | ✅ `--extension resources/pi/yan-memory.ts` 无线无错 |
 
 ---
 
@@ -872,7 +919,7 @@ RPC 文档     <pi包>\docs\rpc.md
 
 | # | 任务 | 为什么 |
 |---|---|---|
-| 1 | **打包分发** | 唯一阻塞「给别人用」的。pi 怎么随应用分发、字体子集化、Electron builder 配置 |
+| 1 | ~~**打包分发**~~ | ⏭ **进行中**：pi 内置已落地（§10.1）；剩下 electron-builder 配置 + 字体子集化 |
 | 2 | 会话树浏览（`get_tree` / `navigateTree`） | 协议已支持；能在分支间跳转 |
 | 3 | 扩展 `registerShortcut` 映射 | 用户自己的扩展如果注册了快捷键，现在按不动 |
 | 4 | 浅色主题打磨 | 令牌齐全，未调 |
