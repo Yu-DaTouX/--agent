@@ -891,6 +891,10 @@ pi --mode rpc  ×N（一个会话一个进程）
 | 2 | **`tsconfig` 没开 `noUnusedLocals`，死 import 不会报错** | 这个 bug 在提交里躺了一次会话，typecheck 一直绿。**验证功能存在不能只靠 typecheck**；要么开 `noUnusedLocals`，要么有一条断言「它真的出现在 DOM 里」（已加 `reasoning` 场景） |
 | 3 | **「是否正在思考」不能拿 `thinkingMs` 猜** | 一个回合可能想好几次（每次工具往返前都想），`thinkingMs` 是**累加**的，第二段开始时已 > 0。新增 `thinkingLive`（`thinking_start` 置位、`thinking_end` 清掉）随 `msg-update` 下发，胶囊据它展开/折叠 |
 | 4 | **协议有 ≠ 界面有** | 先用裸 RPC 验证过：`thinking_delta` 真的在流（366 个、1315 字）、模型 `reasoning:true`、档位 medium。**先确认数据到了，再查渲染** —— 否则会在协议层白找一圈 |
+| 5 | **固定大小的窗口要用 `height`，不能用 `max-height`** | 用户要「推理窗口固定大小、约占窗口 1/4、信息在里面滚」。`max-height: 260px` 是「最多 260」——内容短时盒子跟着短、内容长时拖到 260，都不叫固定。改成 `height: 25vh` + `min/max` 护栏（极端窗口尺寸下的保护），内容溢出让窗口自己滚 |
+| 6 | **自动跟随不能用无脑 `scrollTop = scrollHeight`** | 用户往上翻想看前面在想什么时，每一帧新字到达都会把他拽回底部。记一个「是否粘着底部」（`onScroll` 里算，离开底部 > 24px 就不跟随），重新展开时再回到粘底 |
+| 7 | **hook 依赖的变量声明在后面 → TDZ，整块不渲染** | 我把 `useEffect(..., [shown, open])` 加在 `const open = manual ?? !!live` **之前** → 组件每次渲染抛 ReferenceError，胶囊又消失了。**新建 hook 时确认它引用的变量都已声明**；这次是 `reasoning` 探针立刻变红把它拦住的（再次证明「功能要有 DOM 断言」） |
+| 8 | **fixture 靠真实数据会漂移** | `branch` 场景挂了（「没读到分支」）：`seedSessions` 只拷最近 3 个真实会话，而那 3 个恰好都没分支点（有的那个排第 6）——而真实会话的 mtime 一直在变（我跑一次截图都会动）。**凡是探针需要的输入都要有确定的合成版**，不能指望用户数据里恰好有（已加 `writeBranchSession`：b1 两个孩子 = 一个分支点） |
 
 ---
 

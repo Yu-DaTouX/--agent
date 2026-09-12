@@ -125,14 +125,16 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 | 1 | **推理胶囊从不渲染（真 bug）** | `ReasoningCapsule` 只被 import、从未 `<ReasoningCapsule>`；`TurnActivity` 又在工具为空时 `return null`。重构时丢的，typecheck 抓不到。已在 `TurnActivity` 里按「思考胶囊 → 工具行」顺序补回 |
 | 2 | **精确的「正在推理」信号** | 新增 `UIMessage.thinkingLive`（`thinking_start` 置位 / `thinking_end` 清掉，随 `msg-update` 下发），不再拿累加的 `thinkingMs` 猜 |
 | 3 | **回归探针 `reasoning`** | 注入数据断言：胶囊真的在 DOM 里 / live 展开且逐字追上 / 结束自动折叠且留预览与开关 / 无推理不占位。已入 `npm run check`（第 31 个场景） |
-| 4 | 文档计数 30 → 31 | README / HANDOFF / NEXT-SESSION |
+| 4 | **推理改成固定大小的窗口**（用户要求） | 约 **1/4 屏高**（`25vh` + min/max 护栏），内容在窗口内滚动并自动跟随最新；用户上翻时不强行拉回。用 `height` 而非 `max-height`，否则内容一长就把回答顶走 |
+| 5 | 文档计数 30 → 31 + 截图 | README / HANDOFF / NEXT-SESSION；`docs/design/preview/reasoning-window.png` |
+| 6 | **分支 fixture 改为合成** | `branch` 场景因「最近 3 个真实会话恰好无分支点」而挂（数据漂移）。新增 `writeBranchSession`（b1 有两个孩子），不再依赖用户数据 |
 
 ### 验证结果
 
 | 命令 | 结果 |
 |---|---|
 | `npm run check` | ✅ 110 单测 + **31/31 场景** |
-| `npm run test:live -- reasoning` | ✅ 12 条断言全过 |
+| `npm run test:live -- reasoning` | ✅ 16 条断言全过（含窗口高度≈1/4、内容溢出、自动跟随、尺寸不变） |
 | 真模型一次性验证（未入库） | ✅ 真实回合出现胶囊、live 展开、**727 字**推理、结束「已推理 2 秒」 |
 
 ### ⚠️ 本次的教训（已写进 HANDOFF §8.18）
