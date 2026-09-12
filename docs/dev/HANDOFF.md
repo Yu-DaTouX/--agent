@@ -3,7 +3,7 @@
 > **给新会话的第一个指令**（直接复制粘贴的版本在 [`NEXT-SESSION.md`](NEXT-SESSION.md)）：
 > `读 %USERPROFILE%\Desktop\pi-desktop\docs\dev\HANDOFF.md，然后继续。`
 >
-> 最后更新：2026-09-13（**第 18 版：Windows 打包分发（electron-builder）/ 应用图标 / 打包验收探针**）
+> 最后更新：2026-09-13（**第 19 版：修推理胶囊从不渲染 / 打包验收探针 / Windows 分发**）
 >
 > ⚠️ **第 4 版开头的「方向变更」先读** —— 代码按「砚 · 个人 agent」实现（不是编码工具）。
 
@@ -881,7 +881,16 @@ pi --mode rpc  ×N（一个会话一个进程）
 | 4 | **连续创建 offscreen 小窗口会 `ERR_FAILED`** | 生成多尺寸图标时每个尺寸开一个 offscreen 窗口：16px 成功，32px 起报 `ERR_FAILED (-2) loading 'data:text/html…'`。**只渲染一次（512）再用 `nativeImage.resize` 出各尺寸** |
 | 5 | **`nativeImage` 不会导出 `.ico`** | Electron 只能出 PNG。ICO 从 Vista 起允许内嵌 PNG，手写 6 字节 ICONDIR + 16 字节目录项即可（`scripts/build-icon.mjs`），无需引图形库 |
 | 6 | **`git check-ignore` 对否定规则也返回 0** | 判断 `build/icon.ico` 是否真的入库，看 `git status`（`?? build/`）比看 `check-ignore` 的退出码可靠 |
-| 7 | **「能启动」不等于「连得上」** | 打包后 pi 与扩展改从 `process.resourcesPath/` 找，路径错了应用照样开窗口、只是永远「未连接」。**必须有一条跑在打包产物上的断言**（`npm run test:packaged`），开发态的 30 个场景覆盖不到 |
+| 7 | **「能启动」不等于「连得上」** | 打包后 pi 与扩展改从 `process.resourcesPath/` 找，路径错了应用照样开窗口、只是永远「未连接」。**必须有一条跑在打包产物上的断言**（`npm run test:packaged`），开发态的 31 个场景覆盖不到 |
+
+### 8.18 第 19 版的坑（2026-09-13：推理胶囊从不渲染）
+
+| # | 坑 | 教训 |
+|---|---|---|
+| 1 | **`import` 了 ≠ 渲染了** | 用户报「为什么我看不到推理」。真因：`ReasoningCapsule` 在 TurnView 里**只 import、从未 `<ReasoningCapsule>`**；`TurnActivity` 又写死 `if (tools.length === 0) return null`，于是「纯推理、还没调工具」那一段什么都看不到。**组件写完要 grep 一次「自己有没有被渲染」**（`git grep '<ReasoningCapsule'`） |
+| 2 | **`tsconfig` 没开 `noUnusedLocals`，死 import 不会报错** | 这个 bug 在提交里躺了一次会话，typecheck 一直绿。**验证功能存在不能只靠 typecheck**；要么开 `noUnusedLocals`，要么有一条断言「它真的出现在 DOM 里」（已加 `reasoning` 场景） |
+| 3 | **「是否正在思考」不能拿 `thinkingMs` 猜** | 一个回合可能想好几次（每次工具往返前都想），`thinkingMs` 是**累加**的，第二段开始时已 > 0。新增 `thinkingLive`（`thinking_start` 置位、`thinking_end` 清掉）随 `msg-update` 下发，胶囊据它展开/折叠 |
+| 4 | **协议有 ≠ 界面有** | 先用裸 RPC 验证过：`thinking_delta` 真的在流（366 个、1315 字）、模型 `reasoning:true`、档位 medium。**先确认数据到了，再查渲染** —— 否则会在协议层白找一圈 |
 
 ---
 
@@ -945,7 +954,7 @@ pi 官方自己用 esbuild 也打了四道补丁 —— 所以它的 `dist/bundl
 | 验证 | 结果 |
 |---|---|
 | `npm run probe-pi` | ✅ 解析到 `resources/pi-runtime/dist/bundle/cli.js`，model=DeepSeek V4.1 Flash |
-| `npm run check` | ✅ **30/30 场景全绿**（全部跑在内置 pi 上，不是用户全局那个） |
+| `npm run check` | ✅ **31/31 场景全绿**（全部跑在内置 pi 上，不是用户全局那个） |
 | `npm run test:live -- image` | ✅ 真调模型，模型认出"红色" → **wasm 路径可用** |
 | 扩展加载（jiti） | ✅ `--extension resources/pi/yan-memory.ts` 无线无错 |
 | `npm run test:packaged` | ✅ **打包产物验收通过**（win-unpacked + portable，见 §10.2） |

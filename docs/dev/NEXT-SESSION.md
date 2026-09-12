@@ -7,6 +7,7 @@
 
 当前状态：**功能完整、可日常使用，且已能打包分发（Windows）**。  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
   · 对话：流式 / markdown + 高亮 / 工具行（含彩色 diff）/ **回合合并**（一轮 = 一块）
+  · 推理：模型真的思考时用**推理胶囊**逐字展示，结束自动折叠（可再打开，无推理不占位）
   · 回合内顺序：模型说话 → 工作执行栏 → 回复（用户指定）
   · 输入：文本 / `/` 命令补全 / `@` 文件补全 / `!` 直接跑 shell / 图片（粘贴·拖拽·选文件）
   · **写长文模式**：双击 ↑ 或点拖拽柄进入；Enter 换行、Ctrl+Enter 发送
@@ -19,7 +20,7 @@
   · 主题：深浅双套（含代码高亮的深/浅两套配色）
   · 性能：大会话打开 **486ms**（pi 的 switch_session 要 2780ms，改成直读 JSONL）
   · 分发：**Windows 打包**（NSIS 安装包 + 免安装单文件版；内置 pi 与记忆扩展随包，用户不用装 pi）
-  · 验证：`npm run check` 全绿（**110 单测 + 30 个真实应用场景**，连跑两轮稳定）
+  · 验证：`npm run check` 全绿（**110 单测 + 31 个真实应用场景**，连跑两轮稳定）
 
 常用命令：
   npm run launch                                 启动（双击 启动-砚.cmd 等价）
@@ -27,7 +28,7 @@
   npm run dev                                    同上，直接在终端跑
   npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
   npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
-  npm run check                                  提交前跑：typecheck + build + **110 单测 + 30 场景**
+  npm run check                                  提交前跑：typecheck + build + **110 单测 + 31 场景**
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
@@ -86,7 +87,7 @@
   B. ✅ **pi 内置完成**：不自己 esbuild 打包（5 条硬边界，见 HANDOFF §10.1），
      改为搬运 pi 自带的 `dist/bundle` + 6 个最小依赖 = **20MB**
      （vs 依赖捆绑 424MB）。`npm run vendor:pi` 生成，已入 .gitignore。
-     30/30 场景 + 图片场景（wasm 路径）全部跑在内置 pi 上通过。
+     31/31 场景 + 图片场景（wasm 路径）全部跑在内置 pi 上通过。
   C. ✅ **Windows 打包完成**：`electron-builder.yml` → NSIS `*-setup.exe` +
      免安装 `*-portable.exe`（各约 120MB）；内置 pi（20MB）与 `yan-memory.ts`
      走 extraResources。应用图标 `npm run icon`。
@@ -101,7 +102,7 @@
 **代码结构**（components 按 chat·rail·toolbar·settings·shell 分组，
 死代码与 74 个孤儿 i18n 键已清）。
 
-`npm run check`：**110 单测 + 30 场景**（其中 narrow / todonew / libdrag /
+`npm run check`：**110 单测 + 31 场景**（其中 reasoning / narrow / todonew / libdrag /
 vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 等是第 14 版之后新增的）。
 
@@ -112,6 +113,33 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
   B) 代码签名 / macOS·Linux 打包
   C) 先用一用，把不顺的地方告诉我（说具体场景）
 ```
+
+---
+
+## 本次会话（2026-09-13 第 8 段）已完成的事
+
+用户原话：「为什么我看不到推理」。
+
+| # | 事项 | 结果 |
+|---|---|---|
+| 1 | **推理胶囊从不渲染（真 bug）** | `ReasoningCapsule` 只被 import、从未 `<ReasoningCapsule>`；`TurnActivity` 又在工具为空时 `return null`。重构时丢的，typecheck 抓不到。已在 `TurnActivity` 里按「思考胶囊 → 工具行」顺序补回 |
+| 2 | **精确的「正在推理」信号** | 新增 `UIMessage.thinkingLive`（`thinking_start` 置位 / `thinking_end` 清掉，随 `msg-update` 下发），不再拿累加的 `thinkingMs` 猜 |
+| 3 | **回归探针 `reasoning`** | 注入数据断言：胶囊真的在 DOM 里 / live 展开且逐字追上 / 结束自动折叠且留预览与开关 / 无推理不占位。已入 `npm run check`（第 31 个场景） |
+| 4 | 文档计数 30 → 31 | README / HANDOFF / NEXT-SESSION |
+
+### 验证结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run check` | ✅ 110 单测 + **31/31 场景** |
+| `npm run test:live -- reasoning` | ✅ 12 条断言全过 |
+| 真模型一次性验证（未入库） | ✅ 真实回合出现胶囊、live 展开、**727 字**推理、结束「已推理 2 秒」 |
+
+### ⚠️ 本次的教训（已写进 HANDOFF §8.18）
+
+1. **`import` 了 ≠ 渲染了** —— 组件写完要 `git grep '<组件名'` 确认被渲染。
+2. **typecheck 绿不等于功能存在**（`noUnusedLocals` 没开，死 import 不报错）。
+3. **先确认数据到了，再查渲染**：裸 RPC 证明 `thinking_delta` 在流（366 个 / 1315 字），才把范围缩到 DOM。
 
 ---
 
