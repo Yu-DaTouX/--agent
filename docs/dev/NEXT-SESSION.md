@@ -148,7 +148,10 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 | 5 | **滚动条** | 10 → **14px**（可见部分 4 → 8px） |
 | 6 | **标题栏** | 删掉「已连接 · 工作目录」（留空 `.tb-center` 占位，否则三列 grid 会错位）；改 cwd 在设置里，且不再清空对话 |
 | 7 | **新对话 / 删除会话** | 「新对话」实测可用；**删除真 bug**：⋯ 只在选中行渲染 + 删除又对选中行禁用 → 永远删不了。改为每行都渲染 ⋯、悬停显形 |
-| 8 | **模型接入** | 已有完整 UI（设置 → 模型接入，见 `docs/design/preview/model-auth.png`）——待用户确认具体诉求 |
+| 8 | **模型接入** | 已有完整 UI（设置 → 模型接入，见 `docs/design/preview/model-auth.png`） |
+| 9 | **左栏留白收紧** | 左栏各处 12→8px、会话缩进 38→32px；显示的相对时间改用 `lastActivityAt`（与排序键一致，否则看着“没排序”） |
+| 10 | **工具详情只展开正在跑的那条** | 旧 `open = detailOn && !running` 正好写反（已结束的全弹终端）。改为：只有正在运行的自动展开，其余保持一行。开关仍控制已结束的能不能点开 |
+| 11 | **`/login` 路由到模型接入** | pi 的登录是交互式 OAuth，RPC 里没这个命令。Composer 里拦截 `/login` → 打开设置→接入；slashcmd 探针加了断言 |
 
 ### 验证
 
