@@ -26,7 +26,7 @@
   npm run dev                                    同上，直接在终端跑
   npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
   npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
-  npm run check                                  提交前跑：typecheck + build + **110 单测 + 27 场景**
+  npm run check                                  提交前跑：typecheck + build + **110 单测 + 29 场景**
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
@@ -60,6 +60,13 @@
   · **.cmd 文件必须纯 ASCII** —— cmd.exe 按 OEM 代码页读文件，
     非 ASCII 字节在 `chcp` 生效前就把行解析弄崩（实测整个脚本一行都不执行）。
     中文一律由 node 打印 + `chcp 65001`
+  · **断言绑设计意图，不要绑像素值**：收起宽度 8→38→0 的过程中，
+    四个探针里的 `≤12px` / `≤40px` 全成了假失败（跟应用对不对无关）
+  · **「开关」与「面板」要解耦**：开关放标题栏 → 面板收起可以是真的 0 宽；
+    放面板内部就必须为收起态保留宽度，而那条保留宽度会把别的对齐算错
+  · 报「错位」时先找两个本该对齐的东西**各自的参照物**（导航轨钉的是
+    中栏左缘，而消息列是 max-width 居中的 —— 中栏一变宽就错位 110px）
+  · 需要改窗口尺寸的测试：用 `YAN_WIN=宽x高`（渲染端的 resizeTo 无效）
 
 发布前的事：
   A. ✅ **已推 GitHub**：`https://github.com/Yu-DaTouX/--agent`（public）。
@@ -76,9 +83,11 @@
 
 我现在要做的下一步是：____（下面是排队中的事，或直接说别的）
 
-已完成到 2026-09-12（第四轮）：任务模块（「正在进行」就地显示 / 18 字 /
-**历史任务折叠 + 跳转**）/ 收起槽与入口**逐像素对齐** / 导航轨口径统一 /
-压缩记号只在条上 / 窄窗口三档复核。
+已完成到 2026-09-12（第五轮）：两个面板开关回**标题栏两端**（参考 Codex，
+收起 = 0 宽）/ 修**导航轨错位**（它钉在中栏左缘，而消息列是 max-width 居中的）/
+左栏「砚 ⌄」**模式菜单入口**（先只做入口，未接入的项明确禁用）。
+
+`npm run check`：**110 单测 + 29 场景**。
 
 `npm run check`：**110 单测 + 27 场景**（新增 narrow / todonew / libdrag /
 vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv）。
