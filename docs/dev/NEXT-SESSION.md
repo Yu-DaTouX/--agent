@@ -26,7 +26,7 @@
   npm run dev                                    同上，直接在终端跑
   npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
   npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
-  npm run check                                  提交前跑：typecheck + build + 单测 + **18 场景**
+  npm run check                                  提交前跑：typecheck + build + **110 单测 + 22 场景**
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
@@ -76,16 +76,10 @@
 
 我现在要做的下一步是：____（下面是排队中的事，或直接说别的）
 
-已完成到 2026-09-12：工具栏（文件树 + 日志）/ 用户档案 / 启动器 /
-界面缩放（DPI 取整）/ 面板开关位置与几何对称性。
+已完成到 2026-09-12（第二轮）：左栏开关改纯图标 / 引导检查本地已有 key
+（含环境变量）/ 左右栏宽度拖拽 / 工具栏分区拖拽排序 / 工具库（收进库·取回·恢复默认）。
 
-**排队中（用户已提，尚未开工）：**
-  D) 引导第二步：启动时检查**本地已有 key**（含环境变量配的），
-     并加「我已配好 → 重新检测」按钮
-  E) 左右栏宽度**可拖拽调节**（落盘 + 双击复原）
-  F) 工具栏分区**可拖拽调节顺序**（建议用指针事件，不用 HTML5 DnD）
-  G) **工具库按钮**：分区可收进库 / 从库取回
-     （F 与 G 共用 order + hidden 两份数据；库放工具栏头部）
+**排队中：**暂无（用户提的都做完了）。
 
 其余候选：
   A) electron-builder：把内置 pi 做成 extraResources，出第一个安装包
