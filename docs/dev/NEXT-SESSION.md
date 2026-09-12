@@ -5,23 +5,23 @@
 ```
 读 %USERPROFILE%\Desktop\pi-desktop\docs\dev\HANDOFF.md，然后继续。
 
-当前状态：**功能完整、可日常使用，且已能打包分发（Windows）**。  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
+当前状态：**一个独立 agent（pi 只做内核）；功能完整、可日常使用、已能打包分发（Windows）**。  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
   · 对话：流式 / markdown + 高亮 / 工具行（含彩色 diff）/ **回合合并**（一轮 = 一块）
-  · 推理：模型真的思考时用**推理窗口**逐字展示（固定约 1/4 屏高、内部滚动），结束折叠；界面中文时提示模型**用中文推理**
+  · 推理：模型真的思考时用**推理窗口**逐字展示（固定约 1/4 屏高、内部滚动），结束折叠；思考语言**保持 pi 原装**（不注入任何语言指令）
   · 工具：一行一条（Codex 风格），多条折叠为「调用了 N 次工具/命令」
   · 回合内顺序：模型说话 → 工作执行栏 → 回复（用户指定）
   · 输入：文本 / `/` 命令补全 / `@` 文件补全 / `!` 直接跑 shell / 图片（粘贴·拖拽·选文件）
   · **写长文模式**：双击 ↑ 或点拖拽柄进入；Enter 换行、Ctrl+Enter 发送
   · 会话：切换 / 新建 / 重命名 / 复制 / 分叉 / 导出 HTML / 删除；**分支标记在左栏**（父 `⑂N` / 子 `#N` + 从哪句话分出去），创建分支只在对话窗口里
   · 控制：模型与思考档选择器 / 压缩 / 自动压缩与重试 / 队列投递模式 / Ctrl+P·Shift+Tab
-  · 记忆：agent 只能写「未确认」，只有用户确认过才当事实注入提示词
+  · 界面：界面语言**默认跟随系统**（可在设置里改）/ 深浅双主题 / 中英双语
   · 右栏：常驻状态栏（上下文 / 任务进度条 / 队列 / 扩展 / 环境 / 操作）
-  · 设置：记忆 / **模型接入**（API key + 订阅制引导）/ 外观 / 状态 / 关于
+  · 设置：**模型接入**（API key + 订阅制引导）/ 外观 / 状态 / 关于
   · 首次启动有引导（4 条可验证的检查项）
   · 主题：深浅双套（含代码高亮的深/浅两套配色）
   · 性能：大会话打开 **486ms**（pi 的 switch_session 要 2780ms，改成直读 JSONL）
-  · 分发：**Windows 打包**（NSIS 安装包 + 免安装单文件版；内置 pi 与记忆扩展随包，用户不用装 pi）
-  · 验证：`npm run check` 全绿（**110 单测 + 31 个真实应用场景**，连跑两轮稳定）
+  · 分发：**Windows 打包**（NSIS 安装包 + 免安装单文件版；内置 pi 随包，用户不用装 pi）
+  · 验证：`npm run check` 全绿（**110 单测 + 30 个真实应用场景**，连跑两轮稳定）
 
 常用命令：
   npm run launch                                 启动（双击 启动-砚.cmd 等价）
@@ -29,7 +29,7 @@
   npm run dev                                    同上，直接在终端跑
   npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
   npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
-  npm run check                                  提交前跑：typecheck + build + **110 单测 + 31 场景**
+  npm run check                                  提交前跑：typecheck + build + **110 单测 + 30 场景**
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
@@ -88,7 +88,7 @@
   B. ✅ **pi 内置完成**：不自己 esbuild 打包（5 条硬边界，见 HANDOFF §10.1），
      改为搬运 pi 自带的 `dist/bundle` + 6 个最小依赖 = **20MB**
      （vs 依赖捆绑 424MB）。`npm run vendor:pi` 生成，已入 .gitignore。
-     31/31 场景 + 图片场景（wasm 路径）全部跑在内置 pi 上通过。
+     30/30 场景 + 图片场景（wasm 路径）全部跑在内置 pi 上通过。
   C. ✅ **Windows 打包完成**：`electron-builder.yml` → NSIS `*-setup.exe` +
      免安装 `*-portable.exe`（各约 120MB）；内置 pi（20MB）与 `yan-memory.ts`
      走 extraResources。应用图标 `npm run icon`。
@@ -103,11 +103,21 @@
 **代码结构**（components 按 chat·rail·toolbar·settings·shell 分组，
 死代码与 74 个孤儿 i18n 键已清）。
 
-`npm run check`：**110 单测 + 31 场景**（其中 reasoning / narrow / todonew / libdrag /
+`npm run check`：**110 单测 + 30 场景**（其中 reasoning / narrow / todonew / libdrag /
 vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 等是第 14 版之后新增的）。
 
-**排队中（用户指定优先）：内置 pi 的功能完善。**
+**排队中（用户指定优先）：任务面板的定位。**
+
+用户要求：面板应「**展示模型的工作，而不是指引模型**」。
+查证结论：应用侧本来就只**读** `panel_todos` 写进会话的 `custom` entry，从不注入任何东西；
+真正的「指引」在**用户自己的扩展**里 —— 导出的系统提示词（`%USERPROFILE%\Desktop\yan-system-prompt.txt`）
+里那两行 `- panel_todos: …` 与 `- Use panel_todos to keep the task list … set it when you plan …` 就是它。
+两条路：
+  A) **改扩展的工具描述**（轻）—— 让它只描述能力，不说“when you plan / keep in sync”
+  B) **面板改为从会话活动推导**（重）—— 不依赖那个工具，直接从一轮里的工具调用/进度算“工作”
+
+**排队中（次优先）：内置 pi 的功能完善。**
 
 现状：内置 pi 运行时已经能跑（`resources/pi-runtime`，vendor 脚本自校验依赖闭包，
 解析优先级 设置 `piBin` → `YAN_PI_BIN` → 内置 → 全局 → PATH），设置里能改入口、
@@ -157,7 +167,7 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 
 | 命令 | 结果 |
 |---|---|
-| `npm run check` | ✅ 110 单测 + **31/31 场景**（含重写的 outlinepos / topbar / branch） |
+| `npm run check` | ✅ 110 单测 + **30/30 场景**（含重写的 outlinepos / topbar / branch） |
 
 截图：`docs/design/preview/model-auth.png`（模型接入窗口）
 
@@ -178,7 +188,7 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 
 | 命令 | 结果 |
 |---|---|
-| `npm run check` | ✅ 110 单测 + **31/31 场景** |
+| `npm run check` | ✅ 110 单测 + **30/30 场景** |
 | `npm run test:live -- branch` | ✅ 无动作按钮 / 子行 `#N`+来源 / 开关默认折叠 / 展开两条分支 / 点树切过去 / **切换后顺序不变** / 时间让位规则 |
 
 截图：`docs/design/preview/rail-branch-tree.png`
@@ -205,7 +215,7 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 
 | 命令 | 结果 |
 |---|---|
-| `npm run check` | ✅ 110 单测 + **31/31 场景** |
+| `npm run check` | ✅ 110 单测 + **30/30 场景** |
 | `npm run test:live -- reasoning` | ✅ 24 条断言全过（窗口尺寸/滚动/跟随/**回合结束前不折叠**/无推理不占位） |
 | `npm run test:live -- branch` | ✅ 无分支按钮 / 分支数 `⑂2` / 编号 `#1 #2` / 来源句 / 点分支行切过去 / 时间让位规则存在 |
 | 真模型验证：中文推理 | ✅ 汉字 102 / 拉丁字母 0 |
