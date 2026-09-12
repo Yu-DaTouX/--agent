@@ -26,7 +26,7 @@
   npm run dev                                    同上，直接在终端跑
   npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
   npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
-  npm run check                                  提交前跑：typecheck + build + **110 单测 + 25 场景**
+  npm run check                                  提交前跑：typecheck + build + **110 单测 + 27 场景**
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
@@ -76,10 +76,12 @@
 
 我现在要做的下一步是：____（下面是排队中的事，或直接说别的）
 
-已完成到 2026-09-12（第三轮）：拖过窄**自动收起** / 收起态改**细缝**（悬停显按钮）/
-工具库**可拖到工具栏**（带实时位置预览）/ 分区**高度可调** / 上下文显示
-**自动压缩触发点**（读 pi 的 reserveTokens）/ 文件区「已隐藏」+ 开关 /
-`/` 命令**自动管理**（过期重拉 + 常用优先）与填充。
+已完成到 2026-09-12（第四轮）：任务模块（「正在进行」就地显示 / 18 字 /
+**历史任务折叠 + 跳转**）/ 收起槽与入口**逐像素对齐** / 导航轨口径统一 /
+压缩记号只在条上 / 窄窗口三档复核。
+
+`npm run check`：**110 单测 + 27 场景**（新增 narrow / todonew / libdrag /
+vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv）。
 
 **排队中：**暂无（用户提的都做完了）。
 
