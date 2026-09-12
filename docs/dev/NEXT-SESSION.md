@@ -5,7 +5,7 @@
 ```
 读 %USERPROFILE%\Desktop\pi-desktop\docs\dev\HANDOFF.md，然后继续。
 
-当前状态：**功能完整，可日常使用；pi 已内置，发布只差 electron-builder**。  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
+当前状态：**功能完整、可日常使用，且已能打包分发（Windows）**。  · Electron 44 + Vite 7 + React 19 + TS，真连 `pi --mode rpc` 子进程
   · 对话：流式 / markdown + 高亮 / 工具行（含彩色 diff）/ **回合合并**（一轮 = 一块）
   · 回合内顺序：模型说话 → 工作执行栏 → 回复（用户指定）
   · 输入：文本 / `/` 命令补全 / `@` 文件补全 / `!` 直接跑 shell / 图片（粘贴·拖拽·选文件）
@@ -18,7 +18,8 @@
   · 首次启动有引导（4 条可验证的检查项）
   · 主题：深浅双套（含代码高亮的深/浅两套配色）
   · 性能：大会话打开 **486ms**（pi 的 switch_session 要 2780ms，改成直读 JSONL）
-  · 验证：`npm run check` 全绿（**70 单测 + 15 个真实应用场景**，连跑两轮稳定）
+  · 分发：**Windows 打包**（NSIS 安装包 + 免安装单文件版；内置 pi 与记忆扩展随包，用户不用装 pi）
+  · 验证：`npm run check` 全绿（**110 单测 + 30 个真实应用场景**，连跑两轮稳定）
 
 常用命令：
   npm run launch                                 启动（双击 启动-砚.cmd 等价）
@@ -30,6 +31,10 @@
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
+  npm run dist                                   出安装包（NSIS + 免安装单文件版）
+  npm run dist:check                             dist:dir + 打包产物验收（一条龙）
+  npm run test:packaged                          只验已有的 release/win-unpacked
+  npm run icon                                   重新生成 build/icon.ico + icon.png
   YAN_SHOT=x.png YAN_PROMPT='…' npx electron .   真实对话截图
 
 关键约定（改代码前先读）：
@@ -81,8 +86,12 @@
   B. ✅ **pi 内置完成**：不自己 esbuild 打包（5 条硬边界，见 HANDOFF §10.1），
      改为搬运 pi 自带的 `dist/bundle` + 6 个最小依赖 = **20MB**
      （vs 依赖捆绑 424MB）。`npm run vendor:pi` 生成，已入 .gitignore。
-     15/15 场景 + 图片场景（wasm 路径）全部跑在内置 pi 上通过。
-  C. ⏭ **下一步：electron-builder**（把 20MB 运行时做成 extraResources）+ 字体子集化。
+     30/30 场景 + 图片场景（wasm 路径）全部跑在内置 pi 上通过。
+  C. ✅ **Windows 打包完成**：`electron-builder.yml` → NSIS `*-setup.exe` +
+     免安装 `*-portable.exe`（各约 120MB）；内置 pi（20MB）与 `yan-memory.ts`
+     走 extraResources。应用图标 `npm run icon`。
+     新增 `npm run test:packaged` / `dist:check`（跑打包产物真应用，断言用的是包内 pi）。
+     剩：代码签名（SmartScreen 提示）、macOS/Linux。
   D. 会话树浏览（get_tree 协议有，没做 UI）—— 覆盖度里唯一还值得补的。
 
 我现在要做的下一步是：____（下面是排队中的事，或直接说别的）
@@ -92,18 +101,48 @@
 **代码结构**（components 按 chat·rail·toolbar·settings·shell 分组，
 死代码与 74 个孤儿 i18n 键已清）。
 
-`npm run check`：**110 单测 + 30 场景**。
-
-`npm run check`：**110 单测 + 27 场景**（新增 narrow / todonew / libdrag /
-vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv）。
+`npm run check`：**110 单测 + 30 场景**（其中 narrow / todonew / libdrag /
+vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
+等是第 14 版之后新增的）。
 
 **排队中：**暂无（用户提的都做完了）。
 
 其余候选：
-  A) electron-builder：把内置 pi 做成 extraResources，出第一个安装包
-  B) 会话树浏览（get_tree 协议有，没做 UI）
+  A) 会话树浏览（get_tree 协议有，没做 UI）
+  B) 代码签名 / macOS·Linux 打包
   C) 先用一用，把不顺的地方告诉我（说具体场景）
 ```
+
+---
+
+## 本次会话（2026-09-13 第 7 段）已完成的事
+
+用户原话：「修好问题 再有计划的工作完成吧」。
+
+| # | 事项 | 结果 |
+|---|---|---|
+| 1 | **修 HANDOFF.md 重复** | 文档从第 14 版起变成「两份拼一起」（v17 前半 + v14 旧副本 + v17 尾部），`## 0` 出现两次、§8.13 断在半句。已恢复成单份 v17，并补回被切掉的第 9 条行（1057 行 → 1056 行） |
+| 2 | **校正陈旧计数** | README「70 单测 / 13 场景」→ **110 / 30**；NEXT-SESSION 里同一文件写「27 场景」→ 30 |
+| 3 | **Windows 打包分发** | `electron-builder.yml`：NSIS 安装包 + portable 单文件版；内置 pi 与 `yan-memory.ts` 走 extraResources；asar 排除 node_modules（42.9MB → 11.6MB） |
+| 4 | **应用图标** | `npm run icon`（离屏渲染 SVG → 手写 ICO 容器，无新依赖）：深色圆角 + 青色四角星 ✦，16/32/48/64/128/256 |
+| 5 | **打包验收探针** | `npm run test:packaged` / `dist:check`：跑打包产物里的真应用，断言 pi 入口来自包内运行时（win-unpacked + portable 都过） |
+
+### 验证结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run check` | ✅ 110 单测 + **30/30 场景**全绿 |
+| `npm run test:packaged` | ✅ 通过（win-unpacked） |
+| `node scripts/test-packaged.mjs --exe=release/砚-0.1.0-portable.exe` | ✅ 通过（portable 自解压后 pi 入口指向临时目录） |
+| `npm run dist` | ✅ `砚-0.1.0-setup.exe` + `砚-0.1.0-portable.exe`（各约 120MB） |
+
+### ⚠️ 本次新踩的坑（已写进 HANDOFF §8.17）
+
+1. **electron-builder 跳过被拷目录的顶层 `node_modules`** —— 内置 pi 的依赖静默丢失，
+   开发态全绿、装出来连不上。解法：`node_modules` 单列一条 extraResources `from`。
+2. **portable 不转发 stdout** —— 探针结果要能写文件（新增 `YAN_PROBE_OUT`）。
+3. **连续创建 offscreen 小窗口会 `ERR_FAILED`** —— 只渲染一次再 `nativeImage.resize`。
+4. **`git check-ignore` 对否定规则也返回 0** —— 判断入库看 `git status`。
 
 ---
 

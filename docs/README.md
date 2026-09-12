@@ -14,6 +14,7 @@
 | 颜色 / 字号 / 间距的取值从哪来 | [`design/DESIGN.md`](design/DESIGN.md) §1–2（令牌真源） |
 | pi 的 RPC 协议怎么用 | `HANDOFF.md` §11「RPC 事实」（附 pi 包内 `docs/rpc.md` 路径） |
 | 为什么**不要**自己做 esbuild 打包 | [`dev/HANDOFF.md`](dev/HANDOFF.md) §10.1（五条硬边界，附实测报错） |
+| 想打包分发 | 根目录 [`README`](../README.md) 的「打包分发」 + [`electron-builder.yml`](../electron-builder.yml)；坑见 [`dev/HANDOFF.md`](dev/HANDOFF.md) §8.17、§10.2 |
 | 有哪些反复踩的坑 | [`dev/HANDOFF.md`](dev/HANDOFF.md) §8 |
 
 ## 设计目录里的脚本
