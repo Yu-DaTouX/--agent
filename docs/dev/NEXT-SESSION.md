@@ -26,7 +26,7 @@
   npm run dev                                    同上，直接在终端跑
   npm run vendor:pi                              抽取内置 pi 运行时 → resources/pi-runtime/（20MB，不入库）
   npm run vendor:pi:check                        校验内置运行时（真起一次 pi 做 RPC 握手）
-  npm run check                                  提交前跑：typecheck + build + **110 单测 + 29 场景**
+  npm run check                                  提交前跑：typecheck + build + **110 单测 + 30 场景**
   npm run test:live -- motion auth atPath        只跑新增的场景
   npm run test:live -- e2e image queue           会真调模型的三个场景（花少量额度）
   npm run probe-pi                               单独查「pi 能否被找到并启动」
@@ -67,6 +67,10 @@
   · 报「错位」时先找两个本该对齐的东西**各自的参照物**（导航轨钉的是
     中栏左缘，而消息列是 max-width 居中的 —— 中栏一变宽就错位 110px）
   · 需要改窗口尺寸的测试：用 `YAN_WIN=宽x高`（渲染端的 resizeTo 无效）
+  · **改 DOM 结构后先搜一遍 probe 里的旧类名**（工具卡 → 一行式时 4 处失效）
+  · **删代码/样式用编辑工具逐个来**，不要写「按名字找函数再删到顶格 }」的脚本
+    —— 行号会位移，实测把还要用的函数删掉过
+  · 扫 i18n 孤儿键能发现**功能不可达**（rail.rename 没人用 → 重命名缺入口）
 
 发布前的事：
   A. ✅ **已推 GitHub**：`https://github.com/Yu-DaTouX/--agent`（public）。
@@ -83,11 +87,12 @@
 
 我现在要做的下一步是：____（下面是排队中的事，或直接说别的）
 
-已完成到 2026-09-12（第五轮）：两个面板开关回**标题栏两端**（参考 Codex，
-收起 = 0 宽）/ 修**导航轨错位**（它钉在中栏左缘，而消息列是 max-width 居中的）/
-左栏「砚 ⌄」**模式菜单入口**（先只做入口，未接入的项明确禁用）。
+已完成到 2026-09-12（第六轮）：**对话结构**（推理胶囊逐字流式 / 工具调用 Codex
+一行式 + 终端详情开关 / 消息上的分支按钮 / 左栏**分支树**）+
+**代码结构**（components 按 chat·rail·toolbar·settings·shell 分组，
+死代码与 74 个孤儿 i18n 键已清）。
 
-`npm run check`：**110 单测 + 29 场景**。
+`npm run check`：**110 单测 + 30 场景**。
 
 `npm run check`：**110 单测 + 27 场景**（新增 narrow / todonew / libdrag /
 vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv）。
