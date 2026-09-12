@@ -128,13 +128,15 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 | 4 | **推理改成固定大小的窗口**（用户要求） | 约 **1/4 屏高**（`25vh` + min/max 护栏），内容在窗口内滚动并自动跟随最新；用户上翻时不强行拉回。用 `height` 而非 `max-height`，否则内容一长就把回答顶走 |
 | 5 | 文档计数 30 → 31 + 截图 | README / HANDOFF / NEXT-SESSION；`docs/design/preview/reasoning-window.png` |
 | 6 | **分支 fixture 改为合成** | `branch` 场景因「最近 3 个真实会话恰好无分支点」而挂（数据漂移）。新增 `writeBranchSession`（b1 有两个孩子），不再依赖用户数据 |
+| 7 | **回合结束前不折叠推理**（用户要求） | 折叠时机从「单段推理结束」改成「**整个回合结束**」：新增回合级 `SessionState.isAgentRunning`（`agent_start`→`agent_settled`，覆盖工具执行），渲染端 `streamingId` 用 `isStreaming \|\| isAgentRunning`。真模型+真工具验证：工具执行期间采样 8 次、0 次折叠 |
 
 ### 验证结果
 
 | 命令 | 结果 |
 |---|---|
 | `npm run check` | ✅ 110 单测 + **31/31 场景** |
-| `npm run test:live -- reasoning` | ✅ 16 条断言全过（含窗口高度≈1/4、内容溢出、自动跟随、尺寸不变） |
+| `npm run test:live -- reasoning` | ✅ 24 条断言全过（窗口尺寸/滚动/跟随/**回合结束前不折叠**/无推理不占位） |
+| 真模型+真工具（未入库） | ✅ 工具执行期间采样 8 次、**0 次折叠违规**（思考→跑 `ls`→再回答） |
 | 真模型一次性验证（未入库） | ✅ 真实回合出现胶囊、live 展开、**727 字**推理、结束「已推理 2 秒」 |
 
 ### ⚠️ 本次的教训（已写进 HANDOFF §8.18）
@@ -142,6 +144,8 @@ vheight / slashcmd / fs / resize / tools / symmetry / panels / zoom / authEnv
 1. **`import` 了 ≠ 渲染了** —— 组件写完要 `git grep '<组件名'` 确认被渲染。
 2. **typecheck 绿不等于功能存在**（`noUnusedLocals` 没开，死 import 不报错）。
 3. **先确认数据到了，再查渲染**：裸 RPC 证明 `thinking_delta` 在流（366 个 / 1315 字），才把范围缩到 DOM。
+4. **单段信号 ≠ 回合信号**：`isStreaming` 在工具执行时是 false，折叠要跟 `isAgentRunning`。
+5. **合成探针会说谎**：探针里把状态机写错就会假绿 —— 要用真模型跑同一条路径复核。
 
 ---
 
