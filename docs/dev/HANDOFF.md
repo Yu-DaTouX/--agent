@@ -18,6 +18,14 @@
 |---|---|---|
 | 后续 | 发布与账号能力 | 代码签名、macOS/Linux 打包、登录；不属于本次清理范围 |
 
+### 阻塞 / 环境受限（需外部条件）
+
+- **代码签名**：需要开发者证书，本环境没有；electron-builder 已能打出未签名的安装包/便携版。
+- **macOS 打包**：electron-builder 不能在 Windows 上可靠产出/签名 mac 目标，需要 macOS 机器或 CI。
+- **真实登录**：需要账号后端与协议；目前只有本地档案预留，且不显示虚假登录态。
+- **扩展 registerShortcut 映射**：pi 0.85.1 的 RPC 没有相关命令，需上游支持（见下文）。
+- Linux 目标（AppImage/deb）未在本环境验证。
+
 ### 已收尾（内置 pi 管理，2026-09-13 本会话）
 
 - `PiInfo` / `PiProbe` 增加 `source`（内置/系统安装/自定义/环境变量/PATH/shell）、`home`、
@@ -49,10 +57,12 @@
 - 登录交接：复用已有的 `browser_request_user_control` —— 用户在 Chrome 窗口里登录后恢复 Agent 控制。
 - 验证：`npm run probe:chrome`（无头 Chrome 通道 7 项）、`npm run test:live -- externalchrome`
   （面板按钮 → 接入 → observe → 断开，全程无头、隔离 profile）。
-- **已知边界**：外部模式下 `switchTab`（列/切已有标签）未做，`newTab` 可用；外部 Chrome 的下载不进
-  `lastDownload`（那是内嵌 session 的事件）；暂为单页面目标。主进程的 back/forward 对外部已实现
-  （`Page.getNavigationHistory`），但状态里 `canGoBack/canGoForward` 对外部保守报 false，所以**工具栏
-  前进/后退按钮是灰的**（Agent 工具仍可调）；用 Chrome 自己的按钮或补上历史状态即可。
+- 外部模式支持**标签列表/切换/关闭**（Chrome 的页面目标即标签，`state.tabs`/`activeTabId` 直接复用工具栏）、
+  **前进/后退状态回填**（`Page.getNavigationHistory` 同步到 `canGoBack/canGoForward`，工具栏按钮可用），
+  以及**下载捕获**（`Browser.setDownloadBehavior` + `downloadWillBegin/downloadProgress`，落到系统下载目录
+  并写入 `lastDownload`）。
+- 已知边界：外部模式只跟踪**当前目标**的观察状态；切换标签会重建 CDP 连接，之前的 element ref 会失效（需重新 observe）。
+  下载捕获不加自动化断言（要页面真的触发下载），归为人工验证项。
 
 ### 其他修复：工具调用栏展开规则（2026-09-13）
 
@@ -125,6 +135,10 @@ pi 0.85.1 的 `registerShortcut` **只在交互式 TUI 里生效**，RPC 模式�
 | npm run probe:chrome | 外部 Chrome 通道冒烟（无头启动 + CDP 观察/点击；无 Chrome 时跳过） |
 | npm run test:live -- externalchrome | 应用内接入本机 Chrome 的端到端（无头 + 隔离 profile） |
 | npm run dist / npm run dist:check | Windows 打包 / 解包产物验收 |
+
+⚠️ 跑任何 Electron 相关命令（`test:live` / `measure:design` / `dist:check`）之前，确保环境里没有
+`ELECTRON_RUN_AS_NODE=1` —— pi 运行时会注入它。带着它 `npx electron` 会当纯 Node 跑，
+报 `does not provide an export named 'BrowserWindow'`，看起来像应用启动失败。
 
 真实模型场景 e2e、image、queue 可能消耗额度，按需执行。旧的 memory 测试场景已删除。
 
