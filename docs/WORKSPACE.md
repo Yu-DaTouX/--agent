@@ -84,7 +84,7 @@
 | `build-icon.mjs` | 生成打包图标 | `npm run icon` |
 | `lint-css.mjs` | CSS 约定检查 | `npm run lint:css` |
 | `test-unit.mjs` | 单元测试入口，使用构建产物 | 先 `npm run build`，再 `npm run test:unit` |
-| `test-turns.mjs`、`test-zoom.mjs` | 回合与缩放测试模块 | 由单元测试入口组织 |
+| `test-turns.mjs`、`test-zoom.mjs`、`test-question.mjs`、`test-stream-width.mjs`、`test-todo-history.mjs`、`test-chrome-profile.mjs` | 各类纯逻辑测试模块 | 由单元测试入口 `test-unit.mjs` 组织（前两者）或单独运行 |
 | `test-live.mjs`、`probe/` | 真实应用中的场景测试及探针 | `npm run test:live -- 场景名` |
 | `probe/browser.js`、`probe/browser-shot.js` | 内置浏览器场景探针 / 位置诊断（`browser-shot` 未注册为场景，手动用 `YAN_PROBE` 跑） | `npm run test:live -- browser` |
 | `probe/chrome-cdp.mjs` | 外部 Chrome 通道冒烟（无头 Chrome + 临时 profile + 原生 CDP） | `npm run probe:chrome` |
@@ -92,7 +92,8 @@
 | `probe/external-chrome.js` | 应用内接入本机 Chrome 的端到端（无头 + 隔离 profile） | `npm run test:live -- externalchrome` |
 | `test-packaged.mjs` | 验收已有解包产物 | `npm run test:packaged` |
 | `probe-pi.mjs` | pi 查找及启动诊断 | `npm run probe-pi` |
-| `shot.mjs` | Electron 截图辅助 | `npm run shot` |
+| `shot.mjs` | Electron 截图辅助（单张，默认空态） | `npm run shot` |
+| `shots.mjs` + `shot-fixture.js` | 生成 README 用的四张界面截图（注入假数据，不调模型） | `npm run shots` |
 
 完整检查入口为 `npm run check`，实际执行列表以 [package.json](../package.json) 为准。真实模型场景 `e2e`、`image`、`queue` 可能消耗模型额度，按需运行。
 
