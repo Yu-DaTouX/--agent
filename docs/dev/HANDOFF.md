@@ -1,6 +1,6 @@
 # 开发交接 · 砚
 
-更新：2026-09-13（pi 管理/升级收尾）。本文维护当前约定；旧会话流水账和已失效的方案已清理，历史可从 Git 查看。目录见 [工作目录导览](../WORKSPACE.md)。
+更新：2026-09-13（统一浏览器标签与工作区整理）。本文维护当前约定；旧会话流水账和已失效的方案已清理，历史可从 Git 查看。目录见 [工作目录导览](../WORKSPACE.md)。
 
 ## 当前产品与已确认边界
 
@@ -50,18 +50,17 @@
   - `CDPBridge.ts`（Electron `webContents.debugger`）与 `RawCdp.ts`（WebSocket；Node 22 全局 `WebSocket`，
     不引 puppeteer）是同一接口的两个实现。启动参数 `--remote-allow-origins=*` 不可漏，否则 DevTools 连接被拒。
   - `src/main/chrome.ts`：探测 Chrome/Chromium/Edge、选空闲端口、拼参数、启动/停止。
-  - `src/main/browser.ts`：内嵌标签页与外部 Chrome **互斥**；`parts()` 统一路由 observe/click/type/press/
-    scroll/screenshot，navigate/back/forward/reload 对两种模式分叉。状态新增 `mode` 与 `external`。
+  - `src/main/browser.ts`：内嵌标签与外部 Chrome 代理标签可**同时存在于统一标签栏**；`activeMode` 决定当前控制目标，`parts()` 统一路由 observe/click/type/press/scroll/screenshot，navigate/back/forward/reload 按激活目标分叉。外部标签 ID 使用 `chrome:<targetId>`，避免与内嵌 ID 冲突。
 - 入口：工具栏「Chrome」按钮（`[data-testid="browser-external-chrome"]`）；pi 工具
   `browser_connect_local_chrome` / `browser_disconnect_local_chrome`（走 loopback `/external/open|close`）。
 - 登录交接：复用已有的 `browser_request_user_control` —— 用户在 Chrome 窗口里登录后恢复 Agent 控制。
 - 验证：`npm run probe:chrome`（无头 Chrome 通道 7 项）、`npm run test:live -- externalchrome`
   （面板按钮 → 接入 → observe → 断开，全程无头、隔离 profile）。
-- 外部模式支持**标签列表/切换/关闭**（Chrome 的页面目标即标签，`state.tabs`/`activeTabId` 直接复用工具栏）、
+- 外部模式支持**标签列表/切换/关闭**（Chrome 页面目标映射为带 `chrome:` 前缀的代理标签，与内嵌标签合并到 `state.tabs`）；关闭最后一个 Chrome 标签或断开连接后恢复当前内嵌标签，连接失败不会清空内嵌页。
   **前进/后退状态回填**（`Page.getNavigationHistory` 同步到 `canGoBack/canGoForward`，工具栏按钮可用），
   以及**下载捕获**（`Browser.setDownloadBehavior` + `downloadWillBegin/downloadProgress`，落到系统下载目录
   并写入 `lastDownload`）。
-- 已知边界：外部模式只跟踪**当前目标**的观察状态；切换标签会重建 CDP 连接，之前的 element ref 会失效（需重新 observe）。
+- 已知边界：外部 Chrome 只跟踪**当前激活目标**的观察状态；切换 Chrome 代理标签会重建 CDP 连接，之前的 element ref 会失效（需重新 observe）。外部窗口仍是独立 OS 窗口，不做不受 Electron 支持的跨进程原生嵌入。
   下载捕获不加自动化断言（要页面真的触发下载），归为人工验证项。
 
 ### 其他修复：工具调用栏展开规则（2026-09-13）
@@ -106,7 +105,7 @@ pi 0.85.1 的 `registerShortcut` **只在交互式 TUI 里生效**，RPC 模式�
 - 工具栏的「↗ 在外部浏览器打开」走 `shell.openExternal`（只放行 http/https），内嵌视图无登录态时交给用户自己的浏览器。
 - 右栏 5px 宽度把手会被原生视图遮住，`.rightpanel.browser-mode .browser-viewport` 让开 5px，否则浏览器打开时从页面区域拖不了宽。
 - 内嵌浏览器与用户本机 Chrome 完全隔离（独立 `persist:yan-browser`）；登录态不共享。
-- 回归在 `scripts/probe/browser.js`（含错误提示可见性与面板宽度不变形两项断言）。
+- 回归在 `scripts/probe/browser.js` 与 `scripts/probe/external-chrome.js`；后者覆盖统一标签列表、内外切换、关闭最后一个外部标签后恢复内置页。
 - 实现与后续修复的来龙去脉见归档：[实现](../archive/2026-09-13-browser-implementation.md) · [修复](../archive/2026-09-13-browser-fixes.md)。
 
 ## 源码与协议边界

@@ -64,12 +64,12 @@
 
 | 层 | 位置 | 说明 |
 |---|---|---|
-| 主进程控制器 | `src/main/browser.ts` | 持有视图/标签页，开一个带 token 的 127.0.0.1 loopback bridge |
+| 主进程控制器 | `src/main/browser.ts` | 持有内嵌视图与外部 Chrome 代理标签，通过统一标签栏/`activeMode` 路由；开一个带 token 的 127.0.0.1 loopback bridge |
 | 底层算法 | `src/main/browser/` | `CDPBridge`（Electron 调试器实现）/ `RawCdp`（外部 Chrome 的 WebSocket 实现，两者实现同一个 `CdpChannel`）/ `Observer`（可交互元素）/ `ElementRegistry`（generation-scoped ref）/ `InputController`（点击输入）/ `BrowserPolicy`（高风险拦截）/ `geometry.ts`（视口包围盒） |
-| 外部 Chrome | `src/main/chrome.ts` | 探测/启动/停止本机 Chrome（独立 `--user-data-dir` + 调试端口）；已接入 BrowserController（`mode: 'external'`），工具栏可接入/断开，pi 有 connect/disconnect 工具 |
+| 外部 Chrome | `src/main/chrome.ts` | 探测/启动/停止本机 Chrome（独立 `--user-data-dir` + 调试端口）；页面目标以 `chrome:<targetId>` 代理标签并入统一标签栏，工具栏可接入/断开，pi 有 connect/disconnect 工具 |
 | UI | `src/renderer/src/components/browser/BrowserSurface.tsx` | 只画工具栏并把可见区域坐标同步给主进程；网页本身是原生视图 |
 | pi 工具 | `resources/pi-extensions/browser.js` | 通过 `--extension` 临时加载，只访问 bridge，不碰 Electron 对象 |
-| 验收 | `scripts/probe/browser.js` | 真实应用里的浏览器场景探针 |
+| 验收 | `scripts/probe/browser.js`、`scripts/probe/external-chrome.js` | 内嵌浏览器与统一内外标签的真实应用场景探针 |
 | 记录 | `docs/archive/2026-09-13-browser-*.md` | 实现与后续修复的封存记录 |
 
 ## 脚本导航
