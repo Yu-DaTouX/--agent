@@ -88,18 +88,9 @@
 
 ---
 
-## 体积方案（待办）
+## 应用字体方案（已完成）
 
-Maple Mono CN 的 Regular 单字重就是 **17.7 MB**，必须做子集。
-
-| 方案 | 预计体积 | 说明 |
-|---|---|---|
-| `cn-font-split`（npm） | ~2–3 MB | 按 unicode range 切成 woff2 分片，按需加载。**推荐** |
-| `pyftsubset`（fontTools） | ~300 KB–1 MB | 按用到的字符精确切。中文文案固定，可切得很小 |
-| 直接打包全量 TTF | 17.7 MB | 能跑，但为一个 UI 字体不值得 |
-| 检测系统已装 + 回退 | 0 | ❌ 用户没装就掉到非等宽，栅格崩 |
-
-> 参考做法：`sarasa-mono-web` 就是这么切的（2.2 MB / 60+ 分片）。
+应用已使用 npm 依赖 @mogeko/maple-mono-cn 的 unicode-range WOFF2 分片，不再安排手工字体子集化。本目录保留选型实验与原型字体资料。
 
 ### 原型阶段先用全量 TTF
 
