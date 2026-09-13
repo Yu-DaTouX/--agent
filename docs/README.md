@@ -5,7 +5,7 @@
 | 目录 | 内容 |
 |---|---|
 | [`design/`](design/) | **设计规范与设计稿**。`DESIGN.md` 是**设计令牌的唯一真源**（`styles/tokens.css` 必须与它一致），`prototype.html` 是可交互设计稿 |
-| [`dev/`](dev/) | **开发过程文档**（非用户文档）。`HANDOFF.md` 是跨会话交接文档（需求 / 环境事实 / 踩过的坑），`NEXT-SESSION.md` 是新会话的开场指令 |
+| [`dev/`](dev/) | **开发过程文档**（非用户文档）。`HANDOFF.md` 是跨会话交接文档（需求 / 环境事实 / 踩过的坑），`NEXT-SESSION.md` 是新会话的开场指令，`TESTING.md` 是**测试约定**（含「测试用哪个模型」） |
 | [`archive/`](archive/) | **已完结阶段的工作记录**（目标 / 改动 / 验证 / 边界）。现状以下面 `dev/HANDOFF.md` 为准，这里用于追溯「改动是怎么来的」 |
 
 ## 想快速了解这个项目
@@ -19,6 +19,7 @@
 | 为什么**不要**自己做 esbuild 打包 | [`dev/HANDOFF.md`](dev/HANDOFF.md) 「维护中应保留的经验」 |
 | 想打包分发 | 根目录 [`README`](../README.md) 的「打包分发」 + [`electron-builder.yml`](../electron-builder.yml)；坑见 [`dev/HANDOFF.md`](dev/HANDOFF.md) 「维护中应保留的经验」 |
 | 有哪些反复踩的坑 | [`dev/HANDOFF.md`](dev/HANDOFF.md) 「维护中应保留的经验」 |
+| 测试怎么跑、用哪个模型 | [`dev/TESTING.md`](dev/TESTING.md) |
 | 某个功能/修复当时是怎么做的 | [`archive/`](archive/)（按日期与主题索引） |
 | 内置浏览器由哪些文件组成 | [`WORKSPACE.md`](WORKSPACE.md) 「内置浏览器结构」 |
 
