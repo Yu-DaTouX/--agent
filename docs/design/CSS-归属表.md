@@ -9,22 +9,22 @@
 | 顺序 | 文件 | 行数 | 唯一选择器 | 规则数 | @media | !important |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: |
 | 1 | `tokens.css` | 255 | 22 | 23 | 1 | 2 |
-| 2 | `app.css` | 512 | 78 | 78 | 1 | 0 |
-| 3 | `stage1.css` | 307 | 42 | 50 | 1 | 0 |
-| 4 | `redesign.css` | 1326 | 137 | 152 | 5 | 0 |
+| 2 | `app.css` | 453 | 67 | 67 | 1 | 0 |
+| 3 | `stage1.css` | 205 | 25 | 33 | 1 | 0 |
+| 4 | `redesign.css` | 1275 | 130 | 145 | 5 | 0 |
 | 5 | `motion.css` | 1364 | 179 | 184 | 5 | 11 |
 | 6 | `settings.css` | 306 | 45 | 45 | 0 | 0 |
 | 7 | `electron.css` | 35 | 11 | 12 | 0 | 0 |
 | 8 | `highlight.css` | 173 | 81 | 81 | 0 | 0 |
 | 9 | `layout.css` | 168 | 15 | 15 | 3 | 2 |
-| 10 | `shell.css` | 275 | 40 | 40 | 0 | 0 |
+| 10 | `shell.css` | 304 | 44 | 44 | 0 | 0 |
 | 11 | `rail.css` | 1112 | 160 | 162 | 0 | 0 |
-| 12 | `chat.css` | 1082 | 154 | 154 | 0 | 0 |
+| 12 | `chat.css` | 1144 | 162 | 162 | 0 | 0 |
 | 13 | `composer.css` | 760 | 98 | 98 | 0 | 0 |
 | 14 | `tools.css` | 989 | 154 | 155 | 0 | 0 |
 | 15 | `browser.css` | 344 | 50 | 50 | 0 | 0 |
 | 16 | `dialog.css` | 80 | 11 | 11 | 0 | 0 |
-| | **合计** | **9088** | **1156** | | | |
+| | **合计** | **8967** | **1156** | | | |
 
 ## 2. 覆盖热力：每个文件「最终胜出」的选择器数
 
@@ -34,16 +34,16 @@
 | --- | ---: |
 | `tokens.css` | 16 |
 | `app.css` | 47 |
-| `stage1.css` | 23 |
+| `stage1.css` | 11 |
 | `redesign.css` | 76 |
 | `motion.css` | 176 |
 | `settings.css` | 45 |
 | `electron.css` | 10 |
 | `highlight.css` | 81 |
 | `layout.css` | 15 |
-| `shell.css` | 40 |
+| `shell.css` | 44 |
 | `rail.css` | 160 |
-| `chat.css` | 154 |
+| `chat.css` | 162 |
 | `composer.css` | 98 |
 | `tools.css` | 154 |
 | `browser.css` | 50 |
@@ -51,7 +51,7 @@
 
 ## 3. 被多个文件定义的选择器（覆盖链）
 
-共 **102** 个选择器在 ≥2 个文件里出现。渲染顺序 = 从左到右，**最右那个胜出**。
+共 **83** 个选择器在 ≥2 个文件里出现。渲染顺序 = 从左到右，**最右那个胜出**。
 
 | 选择器 | 定义它的文件（按加载顺序） |
 | --- | --- |
@@ -59,19 +59,15 @@
 | `.rail` | app → redesign → electron → rail |
 | `.titlebar` | app → redesign → electron |
 | `.workspace` | app → redesign → layout |
-| `.rail-body` | app → redesign → rail |
 | `.msg-label` | app → stage1 → redesign |
 | `.bubble` | app → redesign → electron |
-| `.composer` | app → redesign → motion |
 | `.composer textarea` | app → redesign → electron |
 | `.composer-bar` | app → redesign → electron |
 | `.status` | app → redesign → electron |
 | `.md code` | stage1 → redesign → chat |
 | `.md pre` | stage1 → redesign → chat |
-| `.modal-scrim` | stage1 → redesign → motion |
 | `.modal` | stage1 → redesign → motion |
 | `.settings` | redesign → motion → settings |
-| `.settings-scrim` | redesign → motion → settings |
 | `html[data-theme='light']` | tokens → motion |
 | `body` | tokens → electron |
 | `::-webkit-scrollbar` | tokens → redesign |
@@ -80,38 +76,26 @@
 | `.tb-right` | app → redesign |
 | `.search` | app → redesign |
 | `.item` | app → redesign |
-| `.item.sel` | app → redesign |
-| `.item.sel .ico` | app → redesign |
-| `.rail-foot` | app → redesign |
 | `.center` | app → stage1 |
 | `.stream` | app → redesign |
 | `.stream-inner` | app → redesign |
 | `.msg` | app → redesign |
-| `.msg.user .gutter` | app → redesign |
-| `.think` | app → redesign |
 | `.think summary` | app → redesign |
-| `.composer-wrap` | app → redesign |
-| `.composer:focus-within` | app → redesign |
-| `.composer textarea::placeholder` | app → redesign |
 | `.send` | app → redesign |
 | `.send:disabled` | app → redesign |
-| `.cursor` | app → redesign |
 | `.sect` | app → redesign |
 | `.card` | app → redesign |
 | `.connbar` | stage1 → motion |
 | `.empty-stream` | stage1 → redesign |
-| `.empty-mark` | stage1 → redesign |
-| `.empty-title` | stage1 → redesign |
-| `.empty-hint` | stage1 → redesign |
 | `.cursor-inline` | stage1 → redesign |
-| `.md p` | stage1 → chat |
 | `.md pre code` | stage1 → highlight |
+| `.modal-scrim` | stage1 → motion |
 | `.notices` | stage1 → motion |
 | `.notice` | stage1 → motion |
 | `.notice:hover` | stage1 → motion |
 | `.logdrawer` | stage1 → motion |
 | `.stream-row` | stage1 → redesign |
-| `.rail-empty` | stage1 → redesign |
+| `.composer` | redesign → motion |
 | `.browser-tabs` | redesign → browser |
 | `.browser-tab` | redesign → browser |
 | `.browser-new-tab` | redesign → browser |
@@ -125,6 +109,7 @@
 | `.rail-top` | redesign → rail |
 | `.rail-action` | redesign → rail |
 | `.rail-section` | redesign → rail |
+| `.rail-body` | redesign → rail |
 | `.proj-head` | redesign → rail |
 | `.proj-path` | redesign → rail |
 | `.srow-row` | redesign → rail |
@@ -144,17 +129,13 @@
 | `.rp-sec-head` | redesign → tools |
 | `.rp-sec-body` | redesign → tools |
 | `.rp-quota-plan` | redesign → tools |
-| `.rp-meter i` | redesign → motion |
 | `.rp-fs` | redesign → tools |
 | `.rp-fs-row` | redesign → tools |
 | `.rp-fs-size` | redesign → tools |
-| `.rp-meter` | redesign → motion |
 | `.rp-todo.active` | redesign → motion |
-| `.rp-todo.active .rp-box` | redesign → motion |
-| `.rp-todo.active .rp-text` | redesign → motion |
 | `.rp-now-spin` | redesign → motion |
 | `.outline-preview` | redesign → motion |
 | `.op-title` | redesign → motion |
-| `.op-answer` | redesign → motion |
 | `.op-empty` | redesign → motion |
+| `.settings-scrim` | motion → settings |
 
