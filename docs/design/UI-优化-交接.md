@@ -11,7 +11,8 @@
 
 **P0 三项全部完成；P1 全部完成；P2 的性能部分已实测（结论是不需要优化）、视觉部分已建立基线并
 修掉两个真 bug。**
-剩下只有「需要产品判断」的：4.2 的视觉微调（要你指认哪里挤、哪条线多余）。
+剩下的是：**方案 5.1 的「紧凑 / 舒适」密度**（唯一没实现的功能项）、4.2 的视觉微调
+（要你指认哪里挤、哪条线多余）、以及验收清单里还没覆盖的几条 —— 都在 4.5 节。
 
 两件值得先了解的事：
 
@@ -141,19 +142,33 @@ Settings / UiDialog / Onboarding / Rail 删除确认框。
   - ⚠️ 改 `Paragraph` 的 props 要小心：**任何非原始值都会让这个 memo 失效**，
     退回成「每帧重解析整段会话」（实测一次 535ms）。
 
-### 3.9 本轮顺带修的
+### 3.9 本轮补的守卫与回归覆盖
 
 - **`sessions` 探针重写**（`Rewrite the stale session probe assertions`）：左栏不再「悬停展开」，
   旧断言发个 `mousemove` 就当作展开了，功能删掉后它**永远等不到**；而收起时列表是 0 行 →
   探针以「会话太少」**假通过**。现在显式 `setRailPinned(true)` 并断言，依赖 pi 的部分显式跳过。
 - **`light` 探针**：第 3 节断言的是废弃的 `.tool-head` / `.tool-sum`，选择器恒不匹配 →
-  断言**静默走「跳过」分支**。改用 `.trow-head`，并新增第 5 节（终端窗口内部的深色覆盖）。
+  断言**静默走「跳过」分支**。改用 `.trow-head`，并新增：第 5 节（终端内部的深色覆盖）、
+  第 6 节（**浅色主题下不该有「深色块」** —— 主题令牌写死这类 bug 的泛化扫描）。
+- **`virtual` 探针**：新增「向上阅读时不被拉回底部」（验收清单里那条，之前没人钉）。
+- **`sendkey` 探针**：新增 **IME 组合态**断言（中文输入法选词时 Enter 不能当发送）。
+  直接断言 handler 的决策（`preventDefault`），而不是看输入框有没有被清空 ——
+  隔离环境里 pi 没起时两条路径都不清空，那就测不出区别。
+- **纳入回归**：`dialog` / `sendkey` / `browser` 三个场景定义了却从来没被 `check` 跑过。
+  其中 **`dialog` 是验收清单四条（焦点不逃逸、关闭恢复、Tab 不被抢、图标按钮有名称）的唯一覆盖**。
+- **显式跳过**（不再是假 ✗）：`features` / `layout`（用量条不挂载、百分比是「—」）、`queue`。
+  区分很重要 —— 每次隔离跑都亮红灯，人就学会忽略红灯了。
 - **`shots.mjs` 支持 `YAN_SHOT_DIR`**：调 UI 时把基线导到临时目录，不碰仓库里那 4 张
   已发布的预览图（它们还带着用户未提交的本地修改）。
 - **`css-layer-check.mjs` 的 `!important` 建模 + `--selftest`**（见 4.1）。
 - **设置页文案里的 `**正在运行**`**：`set-desc` 不渲染 markdown，星号被当明文画出来。
   已改文案，并在 `test:unit` 里加了「i18n 文案不含 `**`」的断言。
 - **推理窗口高度**：固定 25vh 改成「内容自适应 + 上限」（见 4.3）。
+- **工具组标题不再整行变红**：红只留在「N 个失败」角标上（用户要求）。
+
+> 上面几个新守卫都**验证过能咬**：把修复/防护临时回退（删 `isComposing`、删
+> `!stickRef.current`、给右栏分区加个深色底），对应断言立刻 ✗。
+> 这是「假守卫」的防身术 —— 本仓已经出现过好几次断言静默失效。
 
 ---
 
@@ -271,6 +286,29 @@ agent 停了、报错了、用户中断了，照转。那是猜测，不是状�
 **兼容**、不能规定。真实会话里现在一条 `panel_todos` entry 都没有（都是 fixture 合成的），
 所以 `status` 的支持目前是「前瞻」：扩展哪天带了，界面当天就能用。
 
+### 4.5 验收清单：还差哪几条
+
+逐条对过方案第 8 节（`docs/design/UI-优化方案.md`）。
+
+**已有守卫**（都在 `check` 里跑）：深浅主题（`light`，含「浅色下不该有深色块」）、
+窄窗 / 极矮 / 高缩放（`narrow` / `vheight` / `zoom`）、面板反复切换（`panels` / `symmetry`）、
+窗口缩放（`resize`）、虚拟化前后一致（`virtual`，含「向上阅读不被拉回」）、
+输入框高度不改发送键与 IME 组合态（`sendkey`）、搜索定位与恢复（`railsearch`）、
+弹窗焦点四项（`dialog`）、减少动态效果（`motion`）、类型 / 构建 / 单测 / 性能实测
+（`typecheck` / `test:unit` / `perf`）。
+
+**还没有的**：
+
+1. **方案 5.1 的「紧凑 / 舒适」密度** —— **未实现**（唯一没做的功能项，其余都是验证与微调）；
+2. **「推理和工具详情展开、收起后滚动位置合理」** —— 推理窗口有粘底断言，
+   工具详情展开后的滚动位置没测；
+3. **扩展 UI 对话框（UiDialog）与引导页在浅色下的表现** —— `light` 第 6 节覆盖了
+   设置面板这个 modal，UiDialog / Onboarding 没覆盖；
+4. **「全键盘可以完成设置操作」** —— `dialog` 覆盖了 Tab 圈定与焦点恢复，
+   没覆盖「只用键盘走完整个设置流程」。
+
+`4.4` 里留的两个尾巴（`blocked` 还没单独样式、计数口径没有第二个来源可比对）也算在这里。
+
 ---
 
 ## 5. 环境与约定（坑都在这里）
@@ -329,7 +367,15 @@ bdf12bc Stop re-rendering the whole history on every stream frame
 ee67d43 Make the reasoning window fit its content
 95f9cc8 Keep the terminal dark in the light theme too
 b3ebe46 Stop showing markdown asterisks in the settings copy
-902c0c4 Give tasks a real status instead of guessing one
+b7ba38e Bring the handover up to date
+3251aed Give tasks a real status instead of guessing one
+abf77e9 Refresh the generated CSS inventory
+107abd4 Skip the pi-dependent probe assertions instead of failing them
+2d224b0 Keep the red on the failure badge, not the whole group header
+79c7a37 Cover the IME case, and bring two probes into the regression
+c84aef0 Run the dialog scenario in the regression too
+ef7f240 Look for stray dark blocks in the light theme
+f04ef84 Assert that reading history is not yanked back to the bottom
 ```
 
-第一轮全部已推送到 `origin/main`；第二轮（上面那 10 个）目前只在**本地** `main` 上。
+第一轮全部已推送到 `origin/main`；第二轮（上面那 17 个）目前只在**本地** `main` 上。
