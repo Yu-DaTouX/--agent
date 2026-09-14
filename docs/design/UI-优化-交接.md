@@ -11,7 +11,7 @@
 
 **P0 三项全部完成；P1 全部完成；P2 的性能部分已实测（结论是不需要优化）、视觉部分已建立基线并
 修掉两个真 bug。**
-剩下只有「需要产品判断」的：4.2 的视觉微调（要你指认哪里挤/哪条线多余）和 4.4（方案自己要求独立评估）。
+剩下只有「需要产品判断」的：4.2 的视觉微调（要你指认哪里挤、哪条线多余）。
 
 两件值得先了解的事：
 
@@ -242,12 +242,32 @@ YAN_SHOT_DIR=/tmp/uishot npm run shots   # 深色主界面 / 浅色 / 推理窗�
   「依方案为主」改的（方案的 4.2 写的是「内容自适应，并设置高度上限」）。
 - **「消息标签、时间线、引用关系更轻」**：属于视觉调整，与 4.2 一起看，需要你指认。
 
-### 4.4 P1 4.5 任务状态语义（方案自己要求独立评估）
+### 4.4 P1 4.5 任务状态语义（**已完成**）
 
-方案原文：涉及**共享类型和工具协议**，应独立评估，「避免与纯 UI 样式改造混在一起」。
-具体疑点：单个任务失败与整批完成是否共用状态、部分成功是否明确、计数是否以工具协议为准。
+提交 `Give tasks a real status instead of guessing one`。
 
-**我没有碰它** —— 它会影响消息状态与工具协议，不该混在 UI 收尾里做。要动请单开一轮。
+**做了什么**：`SessionTodo` 加了可选 `status`（`pending` / `running` / `done` / `blocked`）；
+`todo-snapshots.ts` 用**别名表**解析（`in_progress` / `doing` / `active` / `IN-PROGRESS` 都认），
+**认不出来就不带 status**（退回 `done` 推断）—— 猜错的状态比没有状态更糟。
+UI 里「哪条正在进行」改成两步：显式 `status === 'running'` 优先；没有显式状态时退回
+「第一个未完成」，但**要求回合真的在跑**。
+
+**为什么「回合在跑」是必需的**：只有 `{text, done}` 的老数据里，谁在做只能推断。
+旧实现 `findIndex(x => !x.done)` 意味着只要还有没做完的，界面上就**永远**有一条在转 ——
+agent 停了、报错了、用户中断了，照转。那是猜测，不是状态。
+
+**守卫**：`test-todo-history.mjs`（别名映射 + `done`/`status` 冲突 + `sameTodos` 不看 status）、
+`todos.js` / `todonew.js`（停下后不得有 active；显式 running 赢过更靠前的 pending）。
+
+**方案里另两个疑点还没覆盖**（写在这里免得被当成已做）：
+- 「单个任务失败与整批完成是否共用状态」—— `blocked` 现在会解析出来，但 UI 还没给它
+  单独的样式（显示成「未完成」）。要看真实数据里到底有没有这个值再定；
+- 「计数是否以工具协议为准」—— 目前计数就是 `done/总数`（清单自己的口径）。
+  这需要另一个可与它对账的来源，目前没有。
+
+⚠️ 写清单的是 **pi 侧的扩展**（`panel_todos`，不在这个仓库），所以这些字段名我们只能
+**兼容**、不能规定。真实会话里现在一条 `panel_todos` entry 都没有（都是 fixture 合成的），
+所以 `status` 的支持目前是「前瞻」：扩展哪天带了，界面当天就能用。
 
 ---
 
@@ -307,6 +327,7 @@ bdf12bc Stop re-rendering the whole history on every stream frame
 ee67d43 Make the reasoning window fit its content
 95f9cc8 Keep the terminal dark in the light theme too
 b3ebe46 Stop showing markdown asterisks in the settings copy
+902c0c4 Give tasks a real status instead of guessing one
 ```
 
-第一轮全部已推送到 `origin/main`；第二轮（上面那 9 个）目前只在**本地** `main` 上。
+第一轮全部已推送到 `origin/main`；第二轮（上面那 10 个）目前只在**本地** `main` 上。
