@@ -8,23 +8,23 @@
 
 | 顺序 | 文件 | 行数 | 唯一选择器 | 规则数 | @media | !important |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 | `tokens.css` | 249 | 22 | 23 | 1 | 2 |
+| 1 | `tokens.css` | 255 | 22 | 23 | 1 | 2 |
 | 2 | `app.css` | 512 | 78 | 78 | 1 | 0 |
-| 3 | `stage1.css` | 579 | 91 | 99 | 1 | 0 |
-| 4 | `stage2.css` | 226 | 34 | 34 | 0 | 0 |
-| 5 | `redesign.css` | 1954 | 232 | 247 | 5 | 2 |
-| 6 | `motion.css` | 1364 | 179 | 184 | 5 | 11 |
-| 7 | `settings.css` | 306 | 45 | 45 | 0 | 0 |
-| 8 | `electron.css` | 35 | 11 | 12 | 0 | 0 |
-| 9 | `highlight.css` | 173 | 81 | 81 | 0 | 0 |
-| 10 | `layout.css` | 93 | 2 | 2 | 3 | 0 |
-| 11 | `shell.css` | 200 | 30 | 30 | 0 | 0 |
-| 12 | `rail.css` | 811 | 117 | 119 | 0 | 0 |
-| 13 | `chat.css` | 709 | 103 | 103 | 0 | 0 |
-| 14 | `composer.css` | 490 | 61 | 61 | 0 | 0 |
-| 15 | `tools.css` | 855 | 142 | 143 | 0 | 0 |
-| 16 | `browser.css` | 344 | 50 | 50 | 0 | 0 |
-| | **合计** | **8900** | **1156** | | | |
+| 3 | `stage1.css` | 307 | 42 | 50 | 1 | 0 |
+| 4 | `redesign.css` | 1326 | 137 | 152 | 5 | 0 |
+| 5 | `motion.css` | 1364 | 179 | 184 | 5 | 11 |
+| 6 | `settings.css` | 306 | 45 | 45 | 0 | 0 |
+| 7 | `electron.css` | 35 | 11 | 12 | 0 | 0 |
+| 8 | `highlight.css` | 173 | 81 | 81 | 0 | 0 |
+| 9 | `layout.css` | 168 | 15 | 15 | 3 | 2 |
+| 10 | `shell.css` | 275 | 40 | 40 | 0 | 0 |
+| 11 | `rail.css` | 1112 | 160 | 162 | 0 | 0 |
+| 12 | `chat.css` | 1082 | 154 | 154 | 0 | 0 |
+| 13 | `composer.css` | 760 | 98 | 98 | 0 | 0 |
+| 14 | `tools.css` | 989 | 154 | 155 | 0 | 0 |
+| 15 | `browser.css` | 344 | 50 | 50 | 0 | 0 |
+| 16 | `dialog.css` | 80 | 11 | 11 | 0 | 0 |
+| | **合计** | **9088** | **1156** | | | |
 
 ## 2. 覆盖热力：每个文件「最终胜出」的选择器数
 
@@ -34,24 +34,24 @@
 | --- | ---: |
 | `tokens.css` | 16 |
 | `app.css` | 47 |
-| `stage1.css` | 72 |
-| `stage2.css` | 33 |
-| `redesign.css` | 171 |
+| `stage1.css` | 23 |
+| `redesign.css` | 76 |
 | `motion.css` | 176 |
 | `settings.css` | 45 |
 | `electron.css` | 10 |
 | `highlight.css` | 81 |
-| `layout.css` | 2 |
-| `shell.css` | 30 |
-| `rail.css` | 117 |
-| `chat.css` | 103 |
-| `composer.css` | 61 |
-| `tools.css` | 142 |
+| `layout.css` | 15 |
+| `shell.css` | 40 |
+| `rail.css` | 160 |
+| `chat.css` | 154 |
+| `composer.css` | 98 |
+| `tools.css` | 154 |
 | `browser.css` | 50 |
+| `dialog.css` | 11 |
 
 ## 3. 被多个文件定义的选择器（覆盖链）
 
-共 **103** 个选择器在 ≥2 个文件里出现。渲染顺序 = 从左到右，**最右那个胜出**。
+共 **102** 个选择器在 ≥2 个文件里出现。渲染顺序 = 从左到右，**最右那个胜出**。
 
 | 选择器 | 定义它的文件（按加载顺序） |
 | --- | --- |
@@ -112,7 +112,6 @@
 | `.logdrawer` | stage1 → motion |
 | `.stream-row` | stage1 → redesign |
 | `.rail-empty` | stage1 → redesign |
-| `.composer-wrap.dropping .composer` | stage2 → redesign |
 | `.browser-tabs` | redesign → browser |
 | `.browser-tab` | redesign → browser |
 | `.browser-new-tab` | redesign → browser |
