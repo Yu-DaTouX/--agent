@@ -14,6 +14,8 @@
 
 ## 尚未完成
 
+> 2026-09-14 更新：下表仅是旧的发布/账号边界，不能视为全部剩余工作。当前实现缺口和验收事项见 [工作区状态](STATUS-2026-09-14.md)。
+
 | 顺序 | 工作 | 当前边界 |
 |---|---|---|
 | 后续 | 发布与账号能力 | 代码签名、macOS/Linux 打包、登录；不属于本次清理范围 |
@@ -23,6 +25,7 @@
 - **代码签名**：需要开发者证书，本环境没有；electron-builder 已能打出未签名的安装包/便携版。
 - **macOS 打包**：electron-builder 不能在 Windows 上可靠产出/签名 mac 目标，需要 macOS 机器或 CI。
 - **真实登录**：需要账号后端与协议；目前只有本地档案预留，且不显示虚假登录态。
+  （**模型接入**的登录是另一回事，已经能用了：见下文「ChatGPT 订阅应用内登录」。）
 - **扩展 registerShortcut 映射**：pi 0.85.1 的 RPC 没有相关命令，需上游支持（见下文）。
 - Linux 目标（AppImage/deb）未在本环境验证。
 
@@ -70,6 +73,33 @@
 - 修法：正在跑 / 排队的工具由 `TurnView` 单独渲染并自动展开详情；已结束的才进
   `ToolGroup`，默认收起，用户点了才开（手动展开不被自动规则推翻）。
 - 回归：`npm run test:live -- toolgroup`（注入合成回合，不烧 token）。
+
+### ChatGPT 订阅应用内登录（2026-09-15）—— 不再需要回终端
+
+用户报的问题：订阅制只能显示 `pi → /login` 命令提示，Plus/Pro 用户必须去终端跑一次。
+现在 **ChatGPT（`openai-codex`）可以在应用内登录**。
+
+- 实现：`src/main/oauth.ts`。**参数逐字对齐内置 pi 的实现**
+  （`resources/pi-runtime/dist/bundle/chunks/openai-codex.js`）：
+  `client_id=app_EMoamEEZ73f0CkXaXp7hrann`、授权 `auth.openai.com/oauth/authorize`、
+  换 token `/oauth/token`、scope `openid profile email offline_access`、
+  回调 `http://localhost:1455/auth/callback`，以及授权 URL 上那三个附加参数
+  （`id_token_add_organizations` / `codex_cli_simplified_flow` / `originator=pi`）。
+  差一个 pi 就不认这个 token，所以**不要"简化"这些参数**。
+- 流程：起本地回调服务 → `shell.openExternal` 开系统浏览器 → 校 state → 换 token →
+  抽 `chatgpt_account_id`（access token 的 `https://api.openai.com/auth` claim）→
+  **合并**写入 `auth.json` 的 `openai-codex` 键，形状与 pi 完全一致。
+- 登录成功后**重启 pi 子进程**（`restartAgent`，与语言切换复用）：pi 只在启动时读
+  auth.json，不重启会出现「登录成功但模型还是旧的」。重启等当前回合跑完才动，不截断流式输出。
+- 端口 1455 是 OpenAI 侧按 client_id 注册的**固定值**，不能换；被占时给明确报错
+  （提示退回 `pi /login`），不静默失败。
+- 其余订阅制（Claude Pro/Max、GitHub Copilot、xAI、OpenRouter）**仍然只能跑终端**：
+  各家协议/客户端参数不同，不能照搬。pi 另有 device code 流程
+  （`auth.openai.com/codex/device`，无需本地端口）可作无端口回退，尚未接。
+- 回归：`scripts/test-oauth.mjs`（把 `electron.shell` 与 `fetch` 换成桩，不联网不开浏览器，
+  覆盖参数/PKCE 自洽/state 拒绝/换 token 请求体/accountId 提取/auth.json 形状/取消）与
+  `scripts/test-credentials.mjs`（provider 名映射）；`scripts/probe/auth.js` 断言应用内登录按钮，
+  其余订阅制不给按钮。
 
 ### 已知上游限制：扩展快捷键（registerShortcut）
 
