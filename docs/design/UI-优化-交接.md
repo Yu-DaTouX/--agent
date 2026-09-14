@@ -9,10 +9,15 @@
 
 ## 1. 一句话现状
 
-**P0 三项全部完成；P1 的 4.1 / 4.3 / 4.4 完成，4.2 完成大半；P2 的性能部分已实测并得出结论（不需要优化）。**
-剩下的都是「要么需要新判断、要么需要截图基线、要么方案自己要求独立评估」的项，列在第 4 节。
+**P0 三项全部完成；P1 全部完成；P2 的性能部分已实测（结论是不需要优化）、视觉部分已建立基线并
+修掉两个真 bug。**
+剩下只有「需要产品判断」的：4.2 的视觉微调（要你指认哪里挤/哪条线多余）和 4.4（方案自己要求独立评估）。
 
-用户报的**卡死（长会话白屏）已定位并修复**，见 3.1 —— 那不是一个样式问题，是布局 bug，值得先了解。
+两件值得先了解的事：
+
+- **长会话白屏卡死**（用户报的）：不是样式问题，是**布局 bug**，见 3.1。
+- **长会话卡顿**：主进程每帧重发整篇累积文本/输出（O(N²)），渲染端每帧重解析全部 markdown。
+  已改成增量推送 + memo，见 3.8 —— 这是第二轮，`P2 不需要优化`那个结论只对**第一轮**的指标成立。
 
 ---
 
@@ -111,36 +116,82 @@ Settings / UiDialog / Onboarding / Rail 删除确认框。
 - 排查过所有 `useStore(...)` 选择器返回新引用的风险：**只有 1 处可疑**（`Rail.tsx` 的
   `descendantCount`，返回数字，安全）。共 195 处。
 
+### 3.8 长会话卡顿：增量推送 + 渲染隔离（第二轮）★
+
+第一轮的 `perf` 探针说「不需要优化」，但那测的是 240 条消息的**合成**场景。真实会话里
+有 1948 条消息、967 次工具调用 —— 数字完全不同。两个提交：
+
+- **`Stream deltas instead of resending everything on every frame`**
+  - 主进程每帧不再重发整篇 `text` / `thinking` / 工具输出，改发**增量**
+    （`textDelta` / `thinkingDelta` / `outputDelta`，游标式）。全量快照仍在
+    `message_end` / 中止 / `sync`，那是权威对齐（类型见 `src/shared/ipc.ts` 的 `MessagePatch`）。
+  - 节流间隔随累积长度自适应：`FLUSH_MS`(16ms) → 上限 `MAX_FLUSH_MS`(120ms)。
+  - `callIndex` / `callOwner` 把工具查找从「线性扫全部消息」改成 O(1)（工具事件是最高频路径）。
+  - 守卫：`scripts/test-stream-deltas.mjs`（直接驱动 `AgentController`，断言「增量拼回来 == 全量」
+    且单帧体积有界）+ `scripts/probe/deltas.js`（渲染端 append 路径）。
+- **`Stop re-rendering the whole history on every stream frame`**
+  - `groupIntoTurns` 每帧重建全部回合对象 → `TurnView` 的 memo 必然失效。
+    下面挂 `Paragraph` / `ToolRow` / `ToolGroup` / `ReasoningCapsule` 的 **memo**（按值比较），
+    markdown 结果加 LRU 缓存，关掉 `highlightAuto`。
+    ⚠️ 代价：**没有语言标注的代码块不再自动上色**（原来每帧对半截代码逐个试语言，约 30ms/块）。
+  - 虚拟化阈值改成「回合数 ≥ 80 **或** 消息数 ≥ 200」——真实会话是「回合少、消息多」，
+    只看回合数等于没开虚拟化。
+  - ⚠️ 改 `Paragraph` 的 props 要小心：**任何非原始值都会让这个 memo 失效**，
+    退回成「每帧重解析整段会话」（实测一次 535ms）。
+
+### 3.9 本轮顺带修的
+
+- **`sessions` 探针重写**（`Rewrite the stale session probe assertions`）：左栏不再「悬停展开」，
+  旧断言发个 `mousemove` 就当作展开了，功能删掉后它**永远等不到**；而收起时列表是 0 行 →
+  探针以「会话太少」**假通过**。现在显式 `setRailPinned(true)` 并断言，依赖 pi 的部分显式跳过。
+- **`light` 探针**：第 3 节断言的是废弃的 `.tool-head` / `.tool-sum`，选择器恒不匹配 →
+  断言**静默走「跳过」分支**。改用 `.trow-head`，并新增第 5 节（终端窗口内部的深色覆盖）。
+- **`shots.mjs` 支持 `YAN_SHOT_DIR`**：调 UI 时把基线导到临时目录，不碰仓库里那 4 张
+  已发布的预览图（它们还带着用户未提交的本地修改）。
+- **`css-layer-check.mjs` 的 `!important` 建模 + `--selftest`**（见 4.1）。
+- **设置页文案里的 `**正在运行**`**：`set-desc` 不渲染 markdown，星号被当明文画出来。
+  已改文案，并在 `test:unit` 里加了「i18n 文案不含 `**`」的断言。
+- **推理窗口高度**：固定 25vh 改成「内容自适应 + 上限」（见 4.3）。
+
 ---
 
-## 4. 待办
+## 4. 剩余项与结论
 
-### 4.1 P0-1 尾款：剩下的行数压不动了（需要先造工具）
+### 4.1 P0-1 尾款：校验器升级**已完成** —— 结论是「确实压不动了」
 
-`stage1.css`（204 行）与 `redesign.css`（1274 行）里剩的，是**被其他文件也定义**的选择器，
-以及多选择器规则（`.a, .b {}`）。
+**已做**（提交 `Make the CSS layer checker model !important`）：
+1. ~~逐选择器~~ —— 上一轮**已经做了**（`splitTopLevel` 按括号/引号深度拆 `,`；
+   直接 `split(',')` 会把 `:is(.a, .b)` 拆坏）；
+2. **`!important` 已建模** —— 这才是真缺口。旧版把 `!important` 当成值的一部分比较，
+   既能误报，也会**假通过**：`{p:1px!important}{p:1px}{p:2px}` 与 `{p:1px}{p:2px}`
+   被判为等价，而前者实际是 `1px`、后者是 `2px`；
+3. 跨 `@media` 保持「各比各的」（保守）；
+4. 新增 `--selftest`（10 个用例，含上面那条假通过），已接入 `npm run typecheck`。
 
-**为什么不能继续直接合并**：现有的 `css-layer-check.mjs` 按**选择器字符串**分组来比对
-计算后声明。多选择器规则在它眼里是一个整体，它**看不到** `.modal, .settings` 与
-`.settings` 之间的覆盖关系。基于它做合并，等价性无法证明。
+**结论：`stage1.css` / `redesign.css` 已经没有可安全合并/删除的量**（实测）：
+```bash
+node scripts/css-dead-rules.mjs --file stage1.css --file redesign.css --dry
+# → 完全被覆盖（可删）3 条；但 stage1.css 可删 0 条、redesign.css 可删 0 条
+node scripts/css-consolidate.mjs stage1.css redesign.css --dry
+# → 无需归并（它按完整 head 分组，`.md h1, .md h2` 与 `.md h1` 不算同名）
+```
 
-**要做的**：
-1. 把校验器升级为**逐选择器**（把 `A, B {}` 拆成 `A {}` + `B {}` 再比对）；
-2. 纳入 `!important` 优先级（早期带 `!important`、后期不带 → 早期仍赢，这条现在没建模）；
-3. 跨 `@media` 的覆盖无法静态判定 → **保持跳过**（宁可少合并）。
+**为什么连「搬家」也不做**：本工具只保证「同一选择器自己的声明集不变」，
+**不建模选择器之间的相对顺序与特异性**。搬家会改变规则之间的先后 —— 元素同时匹配
+`.a`（被提前的那条）与 `.b` 时谁赢会变，而校验器看不见。要安全搬家得先建模特异性，
+收益（行数）与风险不成比例。
 
-**已经踩过的坑**（写在这里免得重踩）：
-- 解析声明前**必须抹掉注释**，否则 `/* … */ padding` 被当成属性名，覆盖判定**静默失效**
-  （实测造成 8 处层叠不一致）。
-- 因为证明不了，我删掉了写了一半的 `scripts/css-merge-dups.mjs`，**没有**纳入代码库。
-  别把它捡回来，除非先把上面 1–3 做完。
+⭐ **工具的边界**（也写在脚本注释里）：它够用来验证「同一批声明换个文件放」，
+**不够**单独证明「改变规则之间相对顺序」是等价的。所以要合并规则时，除了跑它，
+还要保证**同属性同选择器的相对顺序不变**。
 
 **验证流程**：
 ```bash
 cp -r src/renderer/src/styles /tmp/styles-bN
 # 改 styles/
 node scripts/css-layer-check.mjs /tmp/styles-bN src/renderer/src/styles
-# 它会比对 1201 组 (媒体查询, 选择器) 的计算后声明
+# 它会比对 1207 组 (媒体查询, 选择器) 的计算后声明；改动的每一处都会列出来
+node scripts/css-layer-check.mjs --selftest   # 校验器自己的语义
 ```
 
 ⭐ **CSS 加载顺序**（`App.tsx` 与 `css-migrate` / `css-inventory` / `css-layer-check` / `css-tokens`
@@ -151,20 +202,45 @@ tokens, app, stage1, redesign, motion, settings, electron, highlight,
 layout, shell, rail, chat, composer, tools, browser, dialog
 ```
 
-### 4.2 P2 5.1 视觉密度与边框收敛（需要截图基线）
+### 4.2 P2 5.1 视觉密度与边框收敛（基线已建；修了 2 个真 bug，微调待指认）
 
-方案要求：减少重复边框、收敛强调色、统一图标与文字比例。
-**这项我没有做，因为手上没有可对比的基线截图**，靠读 CSS 判断"密度是否合适"不可靠。
+**基线有了**：`scripts/shots.mjs` 现在认 `YAN_SHOT_DIR`（提交 `Let screenshots go
+somewhere other than the published previews`），把图导到临时目录，**不碰**仓库里
+那 4 张已发布的预览图（它们还带着用户未提交的本地修改）。
 
-建议：先用 `npm run shot` / `npm run shots` / `docs/design/measure-design.mjs` 产出基线，
-再逐块调。注意工作区里有用户自己的预览产物（见第 5 节），**不要动**。
+```bash
+YAN_SHOT_DIR=/tmp/uishot npm run shots   # 深色主界面 / 浅色 / 推理窗口 / 设置
+```
 
-### 4.3 P1 4.2 的零头
+（PNG 可以直接看：`read` 工具会把图附上来 —— 这两个 bug 就是这么查出来的，
+靠读 CSS 看不出来。）
 
-方案里还剩：
-- 「推理和终端默认内容自适应，但给高度上限；用户主动调整过就记住」——终端已有 resize + 记忆，
-  推理是靠 `height`（见 `chat.css` 的注释），**建议人工确认一遍短内容时是否仍占大面积空白**。
-- 「消息标签、时间线、引用关系更轻」——属于视觉调整，与 4.2 一起看。
+**已查出并修掉的两个真 bug**（都不是审美问题，是坏了）：
+
+1. **浅色主题下终端窗口里的参数块是白底**（`Keep the terminal dark in the light theme too`）。
+   `.term .tool-pre` 与 `.tool-pre.args` 同为 (0,2,0)，却写在前面 —— 后写者赢，
+   于是整组「终端内覆盖」规则**全是死的**：参数块渲染成 `--bg-0` 白底 + `--border`
+   下边框 + 中灰字，基本看不清。深色主题下 `--bg-0`≈`#0c0c0c`，所以只有浅色暴露。
+   守卫：`light` 探针第 5 节（把终端内每个元素的颜色**合成到深底上**算亮度）。
+2. **设置页文案里的 `**正在运行**` 被当明文画出来**（`Stop showing markdown asterisks…`）。
+   `.set-desc` 直接把 `t()` 插进文本节点，不渲染 markdown。守卫：`test:unit` 断言
+   i18n 文案不含 `**`。
+
+**还没做的**：真正的「密度 / 边框 / 比例」微调。那需要你的偏好 —— 有基线了，
+指哪打哪（哪块觉得挤、哪条线觉得多余）。
+
+⚠️ 调完如果要刷新正式的那 4 张预览图，先想清楚：它们现在带着用户未提交的修改，
+`npm run shots`（不带 `YAN_SHOT_DIR`）会盖掉它们。
+
+### 4.3 P1 4.2 的零头（推理高度已改；其余待指认）
+
+- **推理窗口高度已改成「内容自适应 + 上限」**（`Make the reasoning window fit its content`）。
+  原来固定 `height: 25vh`：900px 窗口 → 227px，而一段 4 行推理只有 80px，下面**空 2/3**
+  （截图实测）。现在 `max-height: min(25vh, 420px)`：短内容贴着内容，超过上限后内部滚动。
+  守卫：`reasoning` 探针（短内容量到 54px、超长内容量到上限；退回固定高度就会 ✗）。
+  ⚠️ 这与 `chat.css` 里「**用户要求**：固定大小」的旧注释冲突 —— 按你的裁决
+  「依方案为主」改的（方案的 4.2 写的是「内容自适应，并设置高度上限」）。
+- **「消息标签、时间线、引用关系更轻」**：属于视觉调整，与 4.2 一起看，需要你指认。
 
 ### 4.4 P1 4.5 任务状态语义（方案自己要求独立评估）
 
@@ -172,11 +248,6 @@ layout, shell, rail, chat, composer, tools, browser, dialog
 具体疑点：单个任务失败与整批完成是否共用状态、部分成功是否明确、计数是否以工具协议为准。
 
 **我没有碰它** —— 它会影响消息状态与工具协议，不该混在 UI 收尾里做。要动请单开一轮。
-
-### 4.5 过时探针：`sessions`
-
-`sessions` 探针还在断言「左栏悬停展开」的行为，而那个功能**已按用户要求删除**。
-它现在是过时的，需要重写断言（不是产品 bug）。
 
 ---
 
@@ -201,9 +272,13 @@ layout, shell, rail, chat, composer, tools, browser, dialog
 
 ---
 
-## 6. 提交记录（本阶段）
+## 6. 提交记录
+
+### 第一轮（P0 + P1 主体 + 性能实测）
 
 ```
+3c02772 Keep diagnostic probes out of the full regression
+4f4817c Write a handover for the UI work
 76b8a6e Surface failed tool calls instead of burying them
 8e26ca7 Keep focus in the rail search instead of dropping it
 eaf65f1 Measure performance instead of guessing
@@ -221,4 +296,17 @@ aeb92fd Consolidate duplicate rules and move the rest into per-module files
 64a18ce Let dialogs take back global hotkeys and unify focus behavior
 ```
 
-全部已推送到 `origin/main`。
+### 第二轮（长会话卡顿 + 收尾）
+
+```
+5327279 Rewrite the stale session probe assertions
+f519435 Stream deltas instead of resending everything on every frame
+bdf12bc Stop re-rendering the whole history on every stream frame
+4e08c99 Make the CSS layer checker model !important
+580eb1d Let screenshots go somewhere other than the published previews
+ee67d43 Make the reasoning window fit its content
+95f9cc8 Keep the terminal dark in the light theme too
+b3ebe46 Stop showing markdown asterisks in the settings copy
+```
+
+第一轮全部已推送到 `origin/main`；第二轮（上面那 9 个）目前只在**本地** `main` 上。
