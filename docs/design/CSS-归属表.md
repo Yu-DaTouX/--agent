@@ -12,17 +12,19 @@
 | 2 | `app.css` | 512 | 78 | 78 | 1 | 0 |
 | 3 | `stage1.css` | 579 | 91 | 99 | 1 | 0 |
 | 4 | `stage2.css` | 226 | 34 | 34 | 0 | 0 |
-| 5 | `redesign.css` | 4196 | 555 | 622 | 5 | 2 |
+| 5 | `redesign.css` | 1954 | 232 | 247 | 5 | 2 |
 | 6 | `motion.css` | 1364 | 179 | 184 | 5 | 11 |
 | 7 | `settings.css` | 306 | 45 | 45 | 0 | 0 |
 | 8 | `electron.css` | 35 | 11 | 12 | 0 | 0 |
 | 9 | `highlight.css` | 173 | 81 | 81 | 0 | 0 |
-| 10 | `layout.css` | 91 | 2 | 2 | 3 | 0 |
-| 11 | `rail.css` | 249 | 43 | 45 | 0 | 0 |
-| 12 | `chat.css` | 36 | 6 | 6 | 0 | 0 |
-| 13 | `tools.css` | 708 | 119 | 120 | 0 | 0 |
-| 14 | `browser.css` | 63 | 12 | 12 | 0 | 0 |
-| | **合计** | **8787** | **1156** | | | |
+| 10 | `layout.css` | 93 | 2 | 2 | 3 | 0 |
+| 11 | `shell.css` | 200 | 30 | 30 | 0 | 0 |
+| 12 | `rail.css` | 811 | 117 | 119 | 0 | 0 |
+| 13 | `chat.css` | 709 | 103 | 103 | 0 | 0 |
+| 14 | `composer.css` | 490 | 61 | 61 | 0 | 0 |
+| 15 | `tools.css` | 855 | 142 | 143 | 0 | 0 |
+| 16 | `browser.css` | 344 | 50 | 50 | 0 | 0 |
+| | **合计** | **8900** | **1156** | | | |
 
 ## 2. 覆盖热力：每个文件「最终胜出」的选择器数
 
@@ -34,16 +36,18 @@
 | `app.css` | 47 |
 | `stage1.css` | 72 |
 | `stage2.css` | 33 |
-| `redesign.css` | 494 |
+| `redesign.css` | 171 |
 | `motion.css` | 176 |
 | `settings.css` | 45 |
 | `electron.css` | 10 |
 | `highlight.css` | 81 |
 | `layout.css` | 2 |
-| `rail.css` | 43 |
-| `chat.css` | 6 |
-| `tools.css` | 119 |
-| `browser.css` | 12 |
+| `shell.css` | 30 |
+| `rail.css` | 117 |
+| `chat.css` | 103 |
+| `composer.css` | 61 |
+| `tools.css` | 142 |
+| `browser.css` | 50 |
 
 ## 3. 被多个文件定义的选择器（覆盖链）
 
@@ -118,8 +122,6 @@
 | `.browser-nav.browser-chrome` | redesign → browser |
 | `.browser-address` | redesign → browser |
 | `.browser-address input` | redesign → browser |
-| `.rp-meter` | redesign → motion |
-| `.rp-meter i` | redesign → motion |
 | `.app.rail-off .rail` | redesign → rail |
 | `.rail-top` | redesign → rail |
 | `.rail-action` | redesign → rail |
@@ -130,12 +132,12 @@
 | `.srow-text` | redesign → rail |
 | `.srow-line` | redesign → rail |
 | `.srow-origin` | redesign → rail |
-| `.srow-name` | redesign → rail |
-| `.srow-menu` | redesign → motion |
 | `.srow-menu-path` | redesign → rail |
 | `.turn` | redesign → motion |
+| `.srow-name` | redesign → rail |
 | `.srow-wrap .srow-time` | redesign → rail |
 | `.mt-pop` | redesign → motion |
+| `.srow-menu` | redesign → motion |
 | `.row-menu` | redesign → motion |
 | `.prose` | redesign → electron |
 | `.rp-body` | redesign → tools |
@@ -143,9 +145,11 @@
 | `.rp-sec-head` | redesign → tools |
 | `.rp-sec-body` | redesign → tools |
 | `.rp-quota-plan` | redesign → tools |
+| `.rp-meter i` | redesign → motion |
 | `.rp-fs` | redesign → tools |
 | `.rp-fs-row` | redesign → tools |
 | `.rp-fs-size` | redesign → tools |
+| `.rp-meter` | redesign → motion |
 | `.rp-todo.active` | redesign → motion |
 | `.rp-todo.active .rp-box` | redesign → motion |
 | `.rp-todo.active .rp-text` | redesign → motion |
