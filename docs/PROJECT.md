@@ -189,10 +189,12 @@ runners[0] = { id:"r1", runId:"r1", … }        // runId 恒等于实例 id
 | 设计令牌 | **先改 `docs/design/DESIGN.md`，再同步** `styles/tokens.css` | `docs/design/DESIGN.md` |
 | 缩放 | 纯计算（DPI 取整）与 electron 部分**分开**，前者才能单测 | `main/zoom-math.ts`（有单测）、`main/zoom.ts` |
 | 动效 | 尊重 `prefers-reduced-motion` | `styles/motion.css` |
+| 版本显示 | 「关于」顶部两行：**正式版本**（`package.json`）+ **构建版本**（构建时注入的时刻与 git 短 hash）。用于确认“现在跑的是哪次构建” | `electron.vite.config.ts`（define）、`shared/build-info.ts`（有单测）、`components/settings/Settings.tsx` |
 
 **改动注意点**
 
 - grid 弹性列一律 `minmax(0, 1fr)`，否则长内容会撑破布局（`lint-css.mjs` 会拦）。
+- 版本信息是**构建时注入**的（`__YAN_BUILD__`）：改了它要重新 `npm run build` 才反映到界面（`启动-砚.cmd` 会强制重建）。
 - `styles/` 里 `stage1` / `stage2` / `redesign` 这些名字旧**不代表无用**；删除前核对导入顺序与动态类名。
 - 改 CSS 后跑 `npm run typecheck`（含 CSS 约定 + 层叠自检）。
 
