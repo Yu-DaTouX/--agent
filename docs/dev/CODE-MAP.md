@@ -1,0 +1,492 @@
+# 代码地图 · 砚（Yan）
+
+> **定位**：文件级的「谁负责什么、和谁联动」。
+> **反方向**（功能 → 实现方式 → 涉及文件）见 [docs/PROJECT.md](../PROJECT.md)。
+> 目录级导航见 [WORKSPACE.md](../WORKSPACE.md)；当前决定与待办见 [HANDOFF.md](HANDOFF.md)；
+> 设计令牌见 [DESIGN.md](../design/DESIGN.md)；测试约定见 [TESTING.md](TESTING.md)。
+>
+> 规模（2026-09-15）：`src/` 109 文件约 4.1 万行、`scripts/` 126 文件约 1.9 万行、
+> `resources/pi-extensions/` 3 文件 432 行。
+
+---
+
+## 0. 五分钟版：一次对话的数据怎么流
+
+```
+用户敲字
+  └─ Composer.tsx（输入区，四种模式：prompt / bash / 命令 / 引用）
+       └─ store 动作（send / setSessionDraft / …）        src/renderer/src/state/store.ts
+            └─ window.yan.*（白名单桥）                    src/preload/index.ts
+                 └─ ipcMain.handle('yan:*')                 src/main/index.ts
+                      └─ RunnerRegistry.select(…)           src/main/runners.ts
+                           └─ AgentController              src/main/agent.ts
+                                └─ PiRpc.command(...)      src/main/protocol.ts
+                                     └─ pi 子进程（--mode rpc，JSONL）
+
+pi 吐事件
+  └─ protocol.ts 收行 → agent.ts 事件循环
+       └─ normalize.ts 归一化成 MainPush                    src/main/normalize.ts
+            └─ pushFrom(runnerId, msg)   ← 附 RuntimeEnvelope 身份（sessionId/runId/generation）
+                 └─ store.applyPush(msg) ← 身份闸门：非当前实例只进缓存
+                      └─ session-runtime.ts 归并             src/renderer/src/state/session-runtime.ts
+                           └─ 顶层投影（session / messages / …）→ 组件订阅渲染
+```
+
+**一句话**：pi 的协议只在 `agent.ts` / `normalize.ts` / `protocol.ts` 三个文件里被认识；
+往外全是 `MainPush` 补丁；界面只做「订阅 + 投影」。
+
+> **§11 是跑起来实测的数据**（真实窗口 dump），用于核对本章的关系有没有漂移。
+> 上面这些字段名/归属关系，凡是与 §11 冲突的，以 §11 为准。
+
+---
+
+## 1. 层次与依赖边界
+
+| 层 | 目录 | 允许依赖 | **禁止** |
+|---|---|---|---|
+| 契约 | `src/shared/` | 无（纯类型 + 纯函数） | `main` / `renderer` / `electron` |
+| 桥 | `src/preload/` | `shared` 的类型 | 不 import 主进程实现，只 `ipcRenderer.invoke/send` |
+| 主进程 | `src/main/` | `shared`、`electron`、`node:*` | `renderer` |
+| 界面 | `src/renderer/src/` | `shared`、`window.yan` | **直接 import `src/main/*`** |
+
+已校验（2026-09-15）：`shared` 不依赖上层；`renderer` 不 import `main`；`preload` 不 import `renderer`。
+
+`renderer` 对契约层的依赖面（实测次数）：`shared/ipc` 22 次、`shared/turns` 4 次、`shared/links` 1 次。
+
+---
+
+## 2. `src/shared/` —— 契约层
+
+两边都 import，所以这里的任何改动都是**跨进程**改动。
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `ipc.ts` | 1747 | 主进程 ↔ 渲染进程的**全部**共享类型与常量：`MainPush`、`SessionState`、`RuntimeEnvelope`、`YanBridge`、`AppSettings`、工具分区、面板宽度夹取… | **被 44 个文件 import**，是全仓第一枢纽。改它必然牵动 `preload/index.ts`（桥）与 `store.ts`（消费） |
+| `turns.ts` | 357 | 把扁平 `UIMessage[]` 折成「一轮一块」；附带 `cacheHitRate`、段落切分 | `TurnView.tsx`、`UsageBar.tsx`、`ConversationOutline.tsx`；有单测 `test-turns.mjs` |
+| `model-capabilities.ts` | 95 | 归一化 pi 的模型描述符：缺失字段一律 `unknown`，**绝不因为字段缺失就判成 unsupported** | `agent.ts`（`setStateFrom`）、`Pickers.tsx`；单测 `test-model-capabilities.mjs` |
+| `links.ts` | 123 | 链接路由：内部浏览器打开 / 文件预览 / 拒绝（非法协议、路径穿越、可执行文件） | 安全判断，纯函数；单测 `test-links.mjs` |
+
+---
+
+## 3. `src/preload/` —— 白名单桥
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `index.ts` | 284 | 用 `contextBridge` 暴露 `window.yan`；渲染进程全程 `nodeIntegration:false` + `contextIsolation:true`。类型来自 `shared/ipc.ts` 的 `YanBridge` | 每一处 `window.yan.xxx()` 都到这里。**新增 IPC 必须三处同步**：此处、`shared/ipc.ts` 的 `YanBridge`、`main/index.ts` 的 handler |
+
+---
+
+## 4. `src/main/` —— 主进程（39 文件）
+
+### 4.1 入口与生命周期
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `index.ts` | 1935 | 窗口 + **全部 IPC handler** + Runner 生命周期 + 托盘 + 缩放 + 快捷键 + 探针注入（`YAN_PROBE`） | 依赖除 `browser/*` 外几乎所有 main 模块。新增功能通常在此注册 handler |
+| `paths.ts` | 49 | 数据路径常量：`YAN_DIR`、`PI_AGENT_DIR`、便携版根… | 被 10 个文件 import。**这里曾经叫 `memory.ts`**（记忆系统），已移除 |
+| `settings.ts` | 380 | 桌面端专属设置（窗口、主题、语言、cwd、栏宽、工具顺序）。**刻意不写 pi 的 `settings.json`** | `index.ts`、`Rail.tsx`、`Settings.tsx` |
+| `runners.ts` | 393 | **会话运行实例注册表（N12）**：命中已有实例 / 复用空闲 / 新建；`RUNNER_LIMIT=3`；`stopOne` / `stopByCwd` / `stopAll`；`runtimeOf` 生成事件身份封套 | 被 `index.ts` 全面使用；单测 `test-runners.mjs`（42 断言） |
+| `exit-snapshot.ts` | 61 | 退出时只存**运行实例元数据**（不复制消息正文） | `index.ts` 退出流程；单测 `test-exit-snapshot.mjs` |
+| `zoom.ts` / `zoom-math.ts` | 105 / 115 | 界面缩放。**计算与 electron 分离**：`zoom-math` 不 import electron，所以能单测 | `index.ts`、`Settings.tsx`；单测 `test-zoom.mjs` |
+
+### 4.2 pi 协议与归一化（**改 pi 交互只需动这三个**）
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `protocol.ts` | 534 | **手写** RPC 客户端。只用 LF 分帧（不能用 readline，它会切 U+2028/29）；命令带 `id`；`resolvePi` 决定用内置还是系统 pi | `agent.ts`、`subagents.ts`、`title.ts` 三个 spawn 点 |
+| `agent.ts` | 1934 | `AgentController`：**一个会话一个 pi 子进程** —— 协议 → UI 的归一化、事件循环、`pendingUi`、"等待输入"计数、能力/统计刷新 | 被 `runners.ts` 持有；`index.ts` 事件经 `pushFrom` 带身份推出 |
+| `normalize.ts` | 211 | pi 原始消息 → `UIMessage`。单独成文件是因为**会话文件解析器也要用**（那不能依赖 `agent.ts`） | `agent.ts`、`session-reader.ts` |
+| `compaction.ts` | 85 | 读 pi 的压缩设置，界面用来解释「何时会自动压缩上下文」 | `index.ts` → `RightPanel.tsx` |
+
+### 4.3 会话 / 项目 / 运行实例
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `sessions.ts` | 465 | 会话索引（**只读**）：列左栏、读标题样本、删除、恢复。真正切换会话是让 pi 自己 `switch_session` | `index.ts`、`Rail.tsx` |
+| `session-reader.ts` | 193 | 直接从 JSONL 解析消息，让界面**立即**有内容（实测 17MB 会话：文件解析 59ms vs 等 pi 2780ms） | `index.ts` 的 `peekSession` → `store.switchSession` 第一步 |
+| `session-layout.ts` | 273 | 会话 ↔ 项目的**产品语义映射**（`sessionId → projectId / scope / 最近访问`）。Yan 不搬 pi 的 JSONL | `index.ts`、`Rail.tsx`；单测 `test-session-layout.mjs` |
+| `title.ts` | 300 | 会话标题：**独立短进程**跑归纳；手动标题粘性；候选→采用。已显式关闭 context files / skills / 模板 | `index.ts`、`store.regenerateTitle`；缓存 `YAN_DIR/titles.json` |
+| `todo-snapshots.ts` | 122 | 扩展写入的任务清单 → 四种状态（带别名表，因为字段名由扩展决定） | `agent.ts` 的 `refreshTodos`；单测 `test-todo-history.mjs` |
+
+### 4.4 浏览器（13 文件）
+
+| 文件 | 行 | 功能 |
+|---|---|---|
+| `browser.ts` | 1252 | 控制器：内嵌 `WebContentsView` + 外部 Chrome 代理标签，统一标签栏 / `activeMode` 路由；loopback bridge（只监听 127.0.0.1，带 token） |
+| `browser/CdpChannel.ts` | 30 | **通道接口** —— 抽这层的理由：内嵌用 Electron debugger，外部 Chrome 必须走原生 WebSocket，两者对上层必须一样（被 8 个文件 import） |
+| `browser/CDPBridge.ts` | 48 | Electron `webContents.debugger` 的实现 |
+| `browser/RawCdp.ts` | 268 | 原生 WebSocket 版（驱动外部 Chrome）；含 `waitForCdp` / `pickPageTarget` |
+| `browser/Observer.ts` | 107 | 页面 → 模型可用的「可交互元素表」（DOM + 无障碍树 + `getBoxModel`，最多 80 个） |
+| `browser/ElementRegistry.ts` | 59 | 一次 observe 产生的 ref 表；**只在整篇文档被替换时作废** |
+| `browser/InputController.ts` | 135 | 命名键 → `(key, code, windowsVirtualKeyCode)`；修过「空格 → 非法 `Key `」这类 bug |
+| `browser/geometry.ts` | 30 | 元素相对视口的包围盒（`getBoxModel` 已扣滚动偏移，必须与 `Input.dispatch*` 的坐标系一致） |
+| `browser/BrowserPolicy.ts` | 22 | 风险策略：明显有副作用的点击先拦下来，交给 `browser_request_user_control` |
+| `browser/network-policy.ts` | 93 | 私网 / 回环地址判断（防远程页面借道）；域名在请求时重新 lookup |
+| `browser/storage-transfer.ts` | 11 | 页面级存储迁移（host-only scope + session 生命周期必须原样保留） |
+| `browser/cookie-transfer.ts` | 36 | Cookie 迁移（同上） |
+| `chrome.ts` / `chrome-profile.ts` | 124 / 271 | 启动/停止本机 Chrome（独立 profile + 调试端口）；把真实 Chrome 的登录态与历史导入我们托管的那份 profile |
+
+> 浏览器整条链路跨 4 层：主进程（`browser.ts` + `browser/`）↔ 原生视图 ↔ pi 扩展（`resources/pi-extensions/browser.js`）↔ renderer（`BrowserSurface.tsx`）。
+
+### 4.5 子代理
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `subagents.ts` | 470 | 自有进程管理的子代理：并发上限、超时、停止、转录上限、用量不重复计入 | `index.ts`；`SubagentList.tsx`、`SubagentPreview.tsx` |
+| `subagent-isolation.ts` | 210 | **写入隔离（L03）**：从 HEAD 建独立 worktree、差异汇总、应用补丁、清理。只处理文件系统/Git 边界，不启动 pi | `subagents.ts`；单测 `test-subagent-isolation.mjs` |
+
+### 4.6 文件、快照、引用
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `files.ts` | 343 | 文件树数据源：列 cwd 下一层（懒加载）；`searchFiles` 全项目检索 | `FileTree.tsx`；单测 `test-files.mjs` |
+| `file-refs.ts` | 294 | 用户**显式引用**的文件（拖入 / 加入上下文）：授权、越界校验、只读预览 | `index.ts`、`Composer.tsx` 附件链路 |
+| `snapshots.ts` | 270 | 写入类工具的**前后快照**（差异归属）。不能只靠工具参数 —— `edit` 的参数只是替换片段 | `agent.ts`；单测 `test-snapshots.mjs` |
+| `credentials.ts` | 453 | 读写 pi 凭证；**`completePath` 是 `@` 补全的主进程侧**（与文件树共用同一条 cwd 边界） | `AuthTab.tsx`、`Composer.tsx`；单测 `test-credentials.mjs` |
+| `command-registry.ts` | 144 | Yan 命令注册表（N18）：本地路由 + 扩展/技能来源 + "仅兼容显示"统一成一个可审阅列表 | `agent.ts` 的 `listCommands`；单测 `test-command-registry.mjs` |
+| `oauth.ts` | 321 | ChatGPT 订阅（`openai-codex`）**应用内** OAuth；参数逐字对齐内置 pi（差一个 pi 就不认这个 token） | `AuthTab.tsx`；单测 `test-oauth.mjs` |
+| `quota.ts` | 298 | 额度查询。**必须用 Electron `net.fetch`**（全局 fetch 会被 Cloudflare 拦） | `RightPanel.tsx` |
+
+---
+
+## 5. `src/renderer/src/` —— 界面（65 文件）
+
+### 5.1 状态层（改这里要最小心）
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `state/store.ts` | 2031 | **唯一状态源**（zustand）：套用 `MainPush` 补丁、按会话缓存、全部用户动作 | **被 26 个文件订阅**。改 store 的字段/动作要同时查：组件订阅点、probe 里的 `window.__yanStore` 调用 |
+| `state/session-runtime.ts` | 261 | 按 sessionId 保存后台运行时状态（消息/草稿/模型/命令/统计）；启动期 `run:<id>` → 稳定 sessionId 的缓存迁移 | `store.ts`；单测 `test-session-runtime.mjs` |
+| `state/capability-request.ts` | 43 | 能力列表响应的**过期判定**：有 runId 只认 runId（`sessionId` 的 `pending→uuid` 是正常过渡） | `store.ts` 的 `reloadModels`/`reloadCommands`；单测 `test-capability-request.mjs` |
+
+### 5.2 对话区 `components/chat/`
+
+| 文件 | 行 | 功能 | 联动 |
+|---|---|---|---|
+| `TurnView.tsx` | 303 | **把一轮对话渲染成一块**；决定推理/工具/正文的排列 | `turns.ts` 的分组结果；`Reasoning.tsx`、`ToolRow.tsx`、`MessageParts.tsx` |
+| `Composer.tsx` | 1187 | 输入区：普通文本 / bash 模式 / `/` 命令 / `@` 引用 + 附件 + 队列 | `slash-query.ts`、`at-query.ts`、`Pickers.tsx`、`UsageBar.tsx` |
+| `Reasoning.tsx` | 403 | 推理流：字素级逐字 + **限高省略**（裁开头、贴底显示最新、顶部渐隐、"展开全部"） | `chat.css` 的 `.reason-body.clip`；`tokens.css` 的 `--reason-max-h` |
+| `ToolRow.tsx` | 293 | 工具调用的 Codex 风格行 / 组；默认收起 | `ToolDetails.tsx`、`Terminal.tsx` |
+| `ToolDetails.tsx` | 135 | 工具详情**分型**（文件改动 / 命令输出…），不再一律套终端壳 | `MessageParts.tsx`、`Terminal.tsx` |
+| `Terminal.tsx` | 316 | 终端窗口（工具输出）；可调大小 | `ToolRow.tsx` |
+| `MessageParts.tsx` | 254 | 共享渲染件：Markdown / 工具行 / 工具详情（被 4 个文件复用） | `TurnView.tsx`、`SubagentPreview.tsx` |
+| `UsageBar.tsx` | 211 | 底部用量条；**模型选择器就住在这里**（无数据时降级为只渲染选择器，不能整条消失） | `Pickers.tsx`、`turns.ts` 的 `cacheHitRate` |
+| `ConversationOutline.tsx` | 406 | 消息流左侧导航轨，一格 = 一轮用户发言 | `App.tsx` 注册的 `scrollToTurn` |
+| `QuestionPanel.tsx` | 194 | 扩展提问面板（非模态，不打断阅读） | `UiBridge.tsx`、`index.ts` 的 `pendingUi` |
+| `SubagentList.tsx` | 97 | 输入区上方的子代理运行列表 | `SubagentPreview.tsx` |
+| `ComposerBorder.tsx` | 131 | 输入框顶边的**工作状态动画**（pi TUI 原样实现） | `Composer.tsx`、`motion.css` |
+| `SessionHeader.tsx` / `EmptyStream.tsx` / `Continuity.tsx` | 93 / 111 / 8 | 主区顶部信息 / 空状态 / 转发壳 | `App.tsx` |
+| `at-query.ts` | 84 | `@` 引用的**光标范围**纯函数（范围不含 `@` 本身，便于替换） | `Composer.tsx`；单测 `test-at-query.mjs` |
+| `slash-query.ts` | 43 | `/` 命令的光标范围纯函数（只在首个 token 触发） | `Composer.tsx`；单测 `test-slash-query.mjs` |
+
+### 5.3 左栏 `components/rail/`
+
+| 文件 | 行 | 功能 |
+|---|---|---|
+| `Rail.tsx` | 1493 | 左栏主体：项目分组、会话树、回收站提示、mini 栏、运行状态槽（N12）、搜索、折叠 |
+| `RailUser.tsx` | 276 | 底部用户块（头像 + 名字 + 设置入口） |
+| `rail-utils.ts` | 5 | `shortProject` —— 目录名缩写 |
+| `sidebar-state.ts` | 30 | 侧栏小偏好（localStorage）。**会话内容不进这里** |
+
+### 5.4 右栏 `components/toolbar/`
+
+| 文件 | 行 | 功能 |
+|---|---|---|
+| `RightPanel.tsx` | 1520 | 右栏主体：按用户配置排列上下文 / 任务 / 队列 / 文件 / 扩展 / 日志 / 操作分区；浏览器视图占下方独立区 |
+| `FileTree.tsx` | 787 | 文件树（懒加载 + 缓存 + 隐藏项开关） |
+| `FilePreview.tsx` | 162 | 只读文件预览（**不是编辑器**） |
+| `SubagentPreview.tsx` | 177 | 子代理详情：任务 + 实时转录 + 停止 |
+| `ToolSection.tsx` | 88 | 分区外观（可折叠头 + body）；被 3 个文件复用 |
+| `ToolLibrary.tsx` | 144 | 工具库：分区**收进库 / 拿到工具栏**、上移 / 下移、恢复默认 —— 全部用按钮；**不提供从库拖出**（浮层里拖动会与「点外面关闭」打架） |
+| `Resizer.tsx` | 221 | 栏宽拖拽把手（跨组件监听 window，结束后必须清理） |
+| `browser/BrowserSurface.tsx` | 379 | 浏览器工具栏 + 把可见区域坐标同步给主进程（网页本身是原生视图） |
+
+### 5.5 设置与外壳
+
+| 文件 | 行 | 功能 |
+|---|---|---|
+| `App.tsx` | 605 | 应用外壳：三栏布局 + `VList` 虚拟滚动 + 生命周期接线 |
+| `main.tsx` | 34 | 把 store 挂到 `window.__yanStore`（探针要用） |
+| `components/settings/Settings.tsx` | 808 | 设置面板五 tab：模型接入 / 外观 / 声音 / 状态 / 关于 |
+| `components/settings/AuthTab.tsx` | 298 | 凭证管理；只有 `openai-codex` 能在应用内登录 |
+| `components/settings/Onboarding.tsx` | 270 | 首次引导（`shouldAutoOnboard` / `markOnboarded`） |
+| `components/shell/TitleBar.tsx` | 187 | 自定义标题栏（主题、栏开关、置顶） |
+| `components/shell/UiBridge.tsx` | 273 | 把 pi 扩展的 select/confirm/input/editor 映射成真模态框 |
+| `components/Pickers.tsx` | 386 | **模型 + 思考强度选择器**；模型未知时降级显示"模型未就绪"而不是消失 |
+
+### 5.6 库 `lib/`
+
+| 文件 | 行 | 功能 |
+|---|---|---|
+| `modalLayer.ts` | 249 | 模态层统一基座（栈、焦点陷阱） |
+| `sound.ts` | 158 | 声音提示：**Web Audio 合成**（不打包 mp3）+ 解锁策略 |
+| `usePresence.ts` | 78 | 让浮层有**退场**动画 |
+| `scrollAnchor.ts` | 55 | 展开/收起工具详情时的滚动锚点（防下方内容被顶走） |
+| `fork.ts` | 34 | 分叉入口（左栏与消息上两处共用） |
+
+### 5.7 图标与 i18n
+
+| 文件 | 行 | 功能 |
+|---|---|---|
+| `icons/Icon.tsx` | 44 | `<use href="#i-x">` 引用（**被 26 个文件 import**，第二枢纽） |
+| `icons/sprite.ts` | 40 | **自动生成**（`npm run icons`）—— 不要手改 |
+| `i18n/index.tsx` | 101 | `useT()` / `I18nProvider`；键扁平 + 命名空间 |
+| `i18n/zh-CN.json` / `en-US.json` | — | 文案。**两份键必须对齐**；改文案要跑 typecheck 的 i18n 检查 |
+
+### 5.8 样式层 `styles/`（16 文件，按 `main.tsx` 的 import 顺序生效）
+
+| 文件 | 行 | 角色 |
+|---|---|---|
+| `tokens.css` | 290 | **设计令牌**；唯一真源在 `DESIGN.md §2`（先改文档再改这里） |
+| `app.css` | 474 | 应用骨架、标题栏、通用控件 |
+| `layout.css` | 167 | 三栏网格（弹性列一律 `minmax(0, 1fr)`，`lint-css.mjs` 会拦） |
+| `rail.css` / `chat.css` / `composer.css` / `tools.css` / `browser.css` / `settings.css` | 1542 / 1362 / 1154 / 1535 / 377 / 305 | 各区域样式 |
+| `stage1.css` / `redesign.css` | 204 / 1284 | 历史层，**名字旧 ≠ 无用**，删除前核对导入顺序与覆盖 |
+| `motion.css` | 1383 | 动效系统（含 `prefers-reduced-motion` 分支） |
+| `shell.css` / `dialog.css` / `electron.css` / `highlight.css` | 303 / 79 / 34 / 172 | 外壳 / 对话框 / Electron 适配 / 代码高亮主题 |
+
+---
+
+## 6. `resources/pi-extensions/` —— 随包分发的 pi 扩展（源码）
+
+| 文件 | 行 | 功能 | 加载方式 |
+|---|---|---|---|
+| `browser.js` | 198 | 内置浏览器工具（`browser_open/observe/click/type/press/scroll/…`）。只访问 loopback bridge，**不碰 Electron 对象** | `agent.ts` 用 `--extension` 加载 |
+| `question.js` | 167 | 让模型在信息不足时主动问用户；自主模式下不弹窗 | 同上 |
+| `response-detail.js` | 67 | 把界面三档"回复详细程度"变成系统提示（standard 不注入） | 同上 |
+
+> ⚠️ 与 `resources/pi-runtime/` 的区别：**这里是源码**（可改、随包分发）；
+> 那个是生成物（Git 忽略、`npm run upgrade:pi` 重生成、**不手改**）。
+
+---
+
+## 7. `scripts/` —— 测试与工具（126 文件）
+
+### 7.1 入口
+
+| 文件 | 功能 |
+|---|---|
+| `test-unit.mjs` | 单测入口：用 esbuild **现场编译**被测模块（不拉 React/Electron），再跑 29 个 `test-*.mjs` |
+| `test-live.mjs` | live 场景入口：建隔离 sandbox（`YAN_*` + 复制 `auth.json`/`models.json`），起真应用跑探针。场景表就是 `CASES` |
+| `launch.mjs` | 一键启动（检查依赖 → 必要时构建 → 起应用） |
+| `probe-pi.mjs` | 只验证「pi 能否被找到并启动」，不开窗口 |
+
+### 7.2 单测模块（29 个 `test-*.mjs`）
+
+按被测目标分：`turns` / `zoom` / `filerefs` / `links` / `response-detail` / `snapshots` / `chrome-profile` / `stream-width` / `question` / `todo-history` / `credentials` / `oauth` / `stream-deltas` / `subagent-isolation` / `runners` / `session-runtime` / `session-layout` / `exit-snapshot` / `command-registry` / `model-capabilities` / `network-policy` / `cookie-transfer` / `at-query` / `slash-query` / `capability-request` / `files`。
+
+### 7.3 live 探针（78 个 `probe/*.js`）
+
+在**真实渲染进程**里执行（`window.__yanStore` 可直接驱动状态）。
+按主题分组（新增探针同时要在 `test-live.mjs` 的 `CASES` 注册）：
+
+> **例外（不在 CASES 里，别当孤儿）**：`survey.js` 由手工 `YAN_PROBE` 驱动（结构勘察，不断言，
+> 用法见 §11.8）；`packaged.js` 由 `test-packaged.mjs`、`sidebar-review.js` 由 `review-ui.mjs` 驱动。
+
+- **会话/运行**：`sessions`、`sessionrunners`、`runnerselect`、`sessionlayout`、`tray`、`rename`、`queuestack`
+- **模型/命令/引用**：`modelmenu`、`modelnotready`、`capabilityload`、`slashcmd`、`at-path`、`fileref`
+- **对话渲染**：`reasoning`、`toolgroup`、`toolrow`、`tools`、`detail`、`streamwidth`、`virtual`、`outline`
+- **布局/视觉**：`layout`、`narrow`、`vheight`、`resize`、`panels`、`symmetry`、`railmini`、`railtitle`、`railsearch`、`projectlimit`、`zoom`、`light`、`density`、`topbar`、`titlebar`、`motion`
+- **文件/浏览器**：`fs`、`linkpreview`、`browser`、`external-chrome`（场景名 `externalchrome`）
+- **其他**：`live`（DOM 体检）、`logs`、`perf`、`sound`、`hotkeys`、`working`、`trash`、`onboarding`、`grouprename`、`autonomous`、`subagent`、`terminal`、`todos`、`todonew`
+- **勘察（不在 CASES）**：`survey`（§11 的真实窗口 dump，靠手工 `YAN_PROBE` 跑）
+
+### 7.4 构建 / 发布 / 诊断
+
+| 文件 | 功能 |
+|---|---|
+| `vendor-pi.mjs` | 把已安装的 pi 抽成**可独立运行**的运行时 → `resources/pi-runtime/` |
+| `upgrade-pi.mjs` | 对比版本并按需重提取 + 自检（`--check` / `--force`） |
+| `test-packaged.mjs` | 验收已有解包产物（包内 pi 能否启动、扩展是否加载） |
+| `build-icon.mjs` | 生成 `build/icon.ico` + `icon.png` |
+| `shot.mjs` / `shots.mjs` / `shot-fixture.js` | Electron 截图；`shots` 生成 README 用图（注入假数据，不调模型） |
+| `live-preview.mjs` / `review-ui.mjs` / `ui-review.js` / `capture-review-window.ps1` | UI 评审辅助（隔离，不碰真凭证） |
+
+### 7.5 CSS 工具链（P0-1 样式收敛的产物）
+
+`css-inventory.mjs`（谁定义/谁覆盖）、`css-tokens.mjs`（令牌清单）、`css-layer-check.mjs`（**层叠等价校验**：迁移后最终生效声明必须一字不变）、`css-consolidate.mjs` / `css-migrate.mjs` / `css-split-check.mjs`（归并/迁移/拆分等价）、`css-dead-rules.mjs`（死规则）、`lint-css.mjs`（守卫：`1fr` 必须写 `minmax(0, 1fr)`）。
+
+---
+
+## 8. 枢纽文件（被 import 次数）
+
+| 次数 | 文件 | 意味 |
+|---|---|---|
+| 44 | `shared/ipc.ts` | 契约。改它 = 跨进程改动 |
+| 26 | `state/store.ts` | 全部 UI 状态与动作 |
+| 26 | `icons/Icon.tsx` | 每个组件都在用 |
+| 10 | `main/paths.ts` | 数据路径 |
+| 8 | `browser/CdpChannel.ts` | 两种 CDP 实现的公共接口 |
+| 5 | `lib/modalLayer.ts` | 所有模态框的基座 |
+| 4 | `shared/turns.ts`、`main/protocol.ts`、`chat/MessageParts.tsx` | 回合分组 / RPC / 共享渲染件 |
+
+---
+
+## 9. 改动波及面速查
+
+| 你要改… | 必须同时看 |
+|---|---|
+| 新增/改 IPC | `shared/ipc.ts`（类型 + `YanBridge`）→ `preload/index.ts`（暴露）→ `main/index.ts`（handler）→ `store.ts`（消费）。四处少一处就静默不通 |
+| 改 pi 协议交互 | 只动 `protocol.ts` / `agent.ts` / `normalize.ts`（**不要**把协议细节泄漏到别处） |
+| 改样式/视觉 | 先改 `docs/design/DESIGN.md`，再同步 `styles/tokens.css`；跑 `npm run typecheck`（含 CSS 守卫 + 层叠自检） |
+| 改网格布局 | 弹性列一律 `minmax(0, 1fr)`；`lint-css.mjs` 会拦 |
+| 改推理块 | `Reasoning.tsx` + `chat.css` 的 `.clip/.is-clipped/.expanded` + `tokens.css` 的 `--reason-max-h` + `probe/reasoning.js`（探针钉死了契约）+ `DESIGN.md` |
+| 改模型/思考档位 | `shared/model-capabilities.ts`（归一化）→ `agent.ts`（能力快照）→ `store.reloadModels` + `state/capability-request.ts`（过期判定）→ `Pickers.tsx` + `RightPanel.tsx` |
+| 改会话/项目归属 | `main/session-layout.ts` + `main/sessions.ts` + `store` 的 `switchSession`/`moveSession` + `Rail.tsx`；有单测 |
+| 改后台会话/身份 | `main/runners.ts`（身份封套）+ `store.applyPush`（身份闸门）+ `state/session-runtime.ts`（缓存）。**三处必须一致**，否则事件会被静默丢弃 |
+| 改文件访问边界 | `main/files.ts`、`main/file-refs.ts`、`main/credentials.ts` 的 `completePath` —— 三者是同一条「只能看 cwd 以内」的约束 |
+| 改浏览器坐标 | 原生视图永远盖在渲染层之上；坐标必须乘 `win.webContents.getZoomFactor()` |
+| 加 live 探针 | 写 `scripts/probe/x.js` **并且**在 `test-live.mjs` 的 `CASES` 注册；改完源码先 `npm run build`（`test:live` 不会自动构建） |
+| 加单测 | `scripts/test-x.mjs` + 在 `test-unit.mjs` 里用 esbuild 编译被测模块（参考 `at-query` 的写法） |
+| 删任何样式/组件 | 先核对导入顺序与动态类名；`stage1`/`stage2`/`redesign` 名字旧不代表无用 |
+
+---
+
+## 10. 不在本图的目录
+
+- `resources/pi-runtime/` —— **生成物**（Git 忽略），`npm run upgrade:pi` 重生成，不手改
+- `out/`、`release/` —— 构建与分发产物（Git 忽略）
+- `docs/` —— 见 [docs/README.md](../README.md)
+
+---
+
+## 11. 运行时实测（真实窗口 · 2026-09-15）
+
+> 本节**不是**读源码推断的，而是把应用跑起来、在渲染端 dump 出来的。
+> 用途：核对上面的「关系」是否漂移 —— 字段叫 `sessionId` 还是 `id`、谁渲染谁、
+> 空分区到底渲不渲染，只有真跑一次才知道。
+> 复现入口：[`scripts/probe/survey.js`](../../scripts/probe/survey.js)（用法见 §11.8）。
+
+### 11.1 骨架尺寸（1440×900 窗口 → 内容区 1251×783）
+
+| 块 | 类名 | 尺寸 |
+|---|---|---|
+| 标题栏 | `header.titlebar` | 1251×36 |
+| 工作区 | `div.workspace` | 1251×747 |
+| 左栏槽 | `div.rail-slot` | 260×747 |
+| ├ 左栏 | `aside.rail` | 260×747 |
+| └ 拖拽把手 | `div.resizer.resizer-rail` | 5×747 |
+| 主区 | `section.center` | 727×747 |
+| ├ 会话头 | `div.shead` | 727×36 |
+| ├ 消息流 | `div.stream` | 727×540 |
+| └ 输入区 | `div.composer-wrap` | 727×172 |
+| 右栏 | `aside.rightpanel` | 264×747 |
+| ├ 拖拽把手 | `div.resizer.resizer-panel` | 5×747 |
+| ├ 头 | `div.rp-top` | 263×39 |
+| └ 体 | `div.rp-body` | 263×709 |
+
+水平 **260 + 727 + 264 = 1251** ✓（两个 resizer 各 5px 含在各自槽内）。
+根节点还带一个状态类：`div.app.rail-pinned`。
+
+### 11.2 输入区内部（`.composer-wrap`）
+
+```
+.composer 679×114
+ ├ .cborder           678×24   ← ComposerBorder（输入框顶边的工作状态动画）
+ ├ .composer-resize    96×12
+ ├ textarea           654×43
+ └ .composer-bar      654×30
+    ├ .composer-tools 616×26 → button.ctool + button.ctool.auto-toggle + span.ctool-hint
+    └ button.send      30×30
+.usagebar 679×22
+ ├ .ub-item（速度） / .ub-turn（输入/输出/缓存）   ← 无数据显示 “—”
+ ├ span.spacer
+ └ .picker-wrap 157×22                           ← 模型 + 思考档位选择器
+    └ button.mt-trigger 157×22
+       ├ span.mt-model  “DeepSeek V4.1 Flash”
+       ├ span.mt-level  “高”
+       └ span.mt-chev   “▾”
+```
+
+→ **模型选择器确实挂在用量条里**（`Composer.tsx` → `UsageBar.tsx` → `Pickers.tsx` 的
+`ModelThinkingPicker`），模型名与思考档位同一行。没有用量数据时 `.ub-item` 显示 `—`，
+**而不是让整条消失** —— 这是「看不到模型选择」那次修复的可见结果。
+
+### 11.3 `store.session` 的真实字段（与直觉不符）
+
+```json
+{
+  "sessionId": "01a0a42a-…",          // 是 sessionId，没有 id
+  "sessionFile": "C:\\…\\<时间戳>_<id>.jsonl",
+  "model": { "id": "deepseek/deepseek-v4.1-flash", "provider": "commandcode",
+             "reasoning": true, "reasoningStatus": "known", … },
+  "thinkingLevel": "medium",
+  "availableThinkingLevels": ["off","minimal","low","medium","high"],
+  "thinkingLevelsStatus": "known",
+  "capabilities": { "modelKey": "commandcode/deepseek/deepseek-v4.1-flash", … }
+}
+```
+
+### 11.4 身份三件套：同一运行实例以**两个键**存在
+
+```
+runners[0]     = { id:"r1", runId:"r1", sessionId:"01a0a42a-…", projectId:"project-Yzovd…",
+                   generation:1, cwd:"C:/…", conn:"ready",
+                   running:false, waiting:false, failed:false, isActive:true }
+statuses       = {}                       ← 没有运行中实例时为空对象
+activeRunnerId = "r1"
+Object.keys(sessionRuntimes) = ["pending:r1", "01a0a42a-0bdc-76ff-8358-0fa2e8527263"]
+```
+
+**最后一行是关键证据**：同一个运行实例先后以 `pending:r1`（启动期）和真实 `sessionId` 为键。
+`state/capability-request.ts` 之所以必须用 `runId` 判过期、**不能**拿 `sessionId` 做等值比较，
+原因就摆在眼前。
+
+### 11.5 右栏分区的真实渲染顺序
+
+`settings.toolOrder` = `["todo","context","files","quota","queue","ext","log","actions"]`
+
+实测渲染出来的只有：**`context → files → quota → queue → log → actions`**
+→ `todo` 与 `ext` 当时没有数据，**完全不渲染**（空分区既不占位也不参与排序）。
+
+每个分区的外壳：
+`.rp-slot > section.rp-sec(.open) > [.rp-sec-row(.rp-grip + .rp-sec-head)] + .rp-sec-body`
+
+### 11.6 其余实测事实
+
+| 事实 | 值 |
+|---|---|
+| `piInfo`（注意**不是** `pi`） | `{ bin, home, version:"0.85.1", source:"bundled", bundled:true, bundledAvailable:true }` |
+| 会话目录按 cwd 编码 | `sessions/--C--Users-YuDaTou-Desktop-pi-desktop--/<时间戳>_<id>.jsonl` |
+| 模型 provider（去重） | `deepseek` / `openai-codex` / `commandcode` |
+| 命令 `source` | `yan`（本地路由）；扩展/技能命令另计 |
+| `thinkingLevels` | `["off","minimal","low","medium","high"]` |
+| `session.model` 字段 | 带 `reasoningStatus` / `inputStatus` / `contextWindowStatus` 等**成对状态**（见 `shared/model-capabilities.ts`） |
+
+### 11.7 store 的投影面（实测 `Object.keys(state)`，80 个键）
+
+读、写、动作混在同一层，按用途分组（键名照抄实测输出）：
+
+- **连接 / 内核**：`conn` `connDetail` `piInfo` `startupPhase` `startConnWatch` `redetectPi` `log` `logs` `notices` `dismissNotice` `dismissRequest`
+- **会话**：`sessions` `session` `peekedPath` `peekNote` `switchSession` `newSession` `deleteSession` `renameSession` `moveSession` `refreshSessions` `fork` `clone` `changeCwd` `titles` `manualTitles` `title` `titleCandidates` `acceptTitleCandidate` `dismissTitleCandidate` `setManualTitle` `regenerateTitle` `exportHtml` `copyLastReply`
+- **运行实例（N12）**：`runners` `statuses` `activeRunnerId` `sessionRuntimes` `syncRunners` `stop`
+- **对话**：`messages` `send` `abort` `abortBash` `abortRetry` `compact` `stats` `todos` `todoHistory` `queue` `queueRestore` `consumeQueueRestore` `removeQueued` `steerQueued` `setSteeringMode` `setFollowUpMode` `consumeEditorInject` `editorInject` `runBash` `autoRetryEnabled` `setAutoRetry` `setAutoCompaction`
+- **模型 / 命令**：`models` `setModel` `cycleModel` `cycleModelBack` `thinkingLevels` `setThinking` `cycleThinking` `reloadModels` `commands` `commandsAt` `reloadCommands` `commandUse` `markCommandUsed`
+- **附件 / 文件**：`attachments` `addAttachments` `addFileRefPaths` `addFileRefs` `removeAttachment` `clearAttachments` `pickImages` `filePreview` `previewFile` `closePreview`
+- **子代理**：`subagents` `loadSubagents` `openSubagent` `subagentPreviewId` `discardSubagent` `mergeSubagent` `startSubagent` `stopSubagent` `clearSubagents`
+- **浏览器**：`browserState` `openBrowser` `closeBrowser` `openExternalChrome` `closeExternalChrome` `syncPageStorage` `syncLocalProfile`
+- **设置 / 外观**：`settings` `settingsOpen` `settingsTab` `setSettingsTab` `patchSettings` `setSettings` `patchProfile` `openSettings` `closeSettings` `alwaysOnTop` `toggleAlwaysOnTop` `maximized` `zoom` `loadZoom` `setUiScale` `uiCollapsed` `setUiCollapsed`
+- **右栏 / 布局**：`toolDropTarget` `setToolDropTarget` `setPanelWidth` `setToolHeight` `setToolLayout` `toggleRightPanel` `setRightPanelOpen` `railPinned` `setRailPinned` `widgets`
+- **UI 草稿 / 扩展 UI**：`uiRequests` `uiDrafts` `setUiDraft` `answerUi` `setSessionDraft`
+
+> 探针与自动化脚本通过 `window.__yanStore` 直接调这些动作（挂载点见 `src/renderer/src/main.tsx`）。
+
+### 11.8 复现方式
+
+```bash
+npm run build      # 必须：探针读的是 out/，不是 src/
+env -u ELECTRON_RUN_AS_NODE \
+  YAN_USER_DATA=<临时目录> YAN_DATA_DIR=<临时目录> \
+  YAN_SESSIONS_DIR="$HOME/.pi/agent/sessions" YAN_PI_DIR="$HOME/.pi/agent" \
+  YAN_PROBE=scripts/probe/survey.js YAN_PROBE_DELAY=14000 \
+  YAN_PROBE_OUT=<输出文件> npx electron .
+```
+
+三个坑（都踩过）：
+
+1. 必须 `env -u ELECTRON_RUN_AS_NODE`，否则 Electron 退化成纯 Node（无窗口、静默 exit 0）。
+2. 必须用**隔离的** `YAN_USER_DATA` —— 单实例锁按 userData 路径命名，撞上就静默 `app.exit(0)`。
+3. 结果要写 `YAN_PROBE_OUT` 文件：Windows 上 GUI 进程的 stdout 不保证可用。
+
+截图同理，用 `YAN_SHOT=<png>`（走真实主进程 + `capturePage`，离屏捕获，不受窗口遮挡影响）。
+视觉留档见 [`docs/design/preview/runtime-survey-2026-09-15.png`](../design/preview/runtime-survey-2026-09-15.png)。

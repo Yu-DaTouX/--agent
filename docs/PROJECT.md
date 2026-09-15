@@ -1,0 +1,222 @@
+# 砚 · 实现总览
+
+本文按功能定位实现；状态与剩余工作见 [HANDOFF](dev/HANDOFF.md)，文件联动见 [CODE-MAP](dev/CODE-MAP.md)。这里描述已有实现，不等同于完整验收通过。
+
+## 一、骨架：三个进程、一条数据流
+
+```
+┌─ 主进程（src/main）───────┐   ┌─ 渲染进程（src/renderer）─┐
+│  窗口 / IPC / 运行实例注册表 │   │  React + zustand          │
+│  AgentController × N      │←→ │  只订阅 MainPush 补丁       │
+└───────────┬───────────────┘   └───────────────────────────┘
+            │ spawn（--mode rpc，JSONL）
+     ┌──────▼──────┐
+     │ pi 子进程 × N │  ← 一个**运行中**的会话 = 一个进程
+     └─────────────┘
+```
+
+三条不可越过的线：
+
+1. **pi 协议只被三个文件认识**：`main/protocol.ts`（手写 RPC 客户端）+ `main/agent.ts`（事件循环）+ `main/normalize.ts`（归一化）。往外一律是 `MainPush` 补丁。
+2. **界面不 import 主进程**，只能经 `preload` 的白名单桥（`window.yan`）。
+3. **共享契约只有 `shared/ipc.ts`**，改它 = 跨进程改动。
+
+一次对话的完整往返（定位对话类问题的路径）：
+
+```
+Composer.tsx → store 动作 → window.yan.*（preload）→ ipcMain.handle（main/index.ts）
+  → RunnerRegistry.select（runners.ts）→ AgentController（agent.ts）→ PiRpc → pi
+pi 的事件回来 → protocol → agent → normalize → pushFrom(runnerId, …) 带身份封套
+  → store.applyPush（身份闸门）→ session-runtime 归并 → 顶层投影 → 组件重渲染
+```
+
+---
+
+## 二、各部分功能与实现方式
+
+### 2.1 对话与流式渲染
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 流式输出 | pi 事件里的 delta 按 `MessagePatch` 增量套用；同一 message id 的多段 delta 合并成一条 | `main/agent.ts`、`main/normalize.ts`、`shared/ipc.ts` 的 `MessagePatch` |
+| 一轮一块 | 扁平的 `UIMessage[]` 折成 `Turn[]`（用户轮 / 助手轮 / bash 轮），推理与工具归到所属回合 | `shared/turns.ts`（纯函数，有单测） |
+| 长会话不卡 | `virtua` 的 `VList` 虚拟滚动 | `App.tsx` |
+| 展开不顶走下方 | 展开/收起前后记录滚动锚点并补偿 | `lib/scrollAnchor.ts` |
+| 底部跟随 | 贴底判定 + 用户上滚时不抢滚动位置 | `App.tsx`、`lib/scrollAnchor.ts` |
+
+**改动注意点**
+
+- `turns.ts` 是纯函数、被两处消费（回合视图 + 大纲），改分组规则要跑 `npm run test:unit`。
+- 流式 delta 的合并规则有单测（`test-stream-deltas.mjs`）—— 曾经漏合并导致文字重复。
+
+### 2.2 会话、项目与分支
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 会话归属 | **pi 继续拥有 JSONL 和目录**；Yan 只在自己数据目录维护 `sessionId → projectId / scope / 最近访问` 的映射 | `main/session-layout.ts`（有单测） |
+| 切会话立即有内容 | 不等 pi：直接解析会话 JSONL | `main/session-reader.ts` → `store.switchSession` |
+| 真正切换 | 让 pi 自己 `switch_session`，Yan 不解析整个会话文件（格式会变） | `main/agent.ts` |
+| 列表 / 删除 / 恢复 | **只读**列目录 + 标题样本；删除走回收站语义 | `main/sessions.ts` |
+| 分支（fork） | 从 pi 的 `get_fork_messages` 拿**分支 entryId**（绝不从 DOM 或归一化消息 id 猜） | `lib/fork.ts`、`main/agent.ts` |
+| 标题 | **独立短进程**跑一次极短请求做归纳；手动标题粘性优先；候选→采用两段式 | `main/title.ts` |
+
+**改动注意点**
+
+- 会话目录按 cwd 编码：`sessions/--C--Users-…-pi-desktop--/<时间戳>_<id>.jsonl`。测试按 **fixture 路径**定位会话，不依赖会被模型重写的标题。
+- `title.ts` 那次短任务**显式关掉了** context files / skills / 提示词模板（`--no-context-files` 等）：否则每次生成标题都要把 `AGENTS.md` 与技能清单塞进系统提示。
+- 分支 entryId 来源只有 `get_fork_messages` 一个，别的地方拿到的 id 不可靠。
+
+### 2.3 运行实例：切走不打断后台任务（N12）
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 后台不中断 | **一个运行中的会话 = 一个 pi 子进程**。切换会话不再复用同一个进程 | `main/runners.ts` |
+| 找/建实例 | 按 `sessionFile` 命中已有实例（命中就只切视图，不发停止命令）；否则复用空闲实例；预算 3 个 | `main/runners.ts`（`RUNNER_LIMIT = 3`） |
+| 到上限 | **明确拒绝并提示**，绝不偷偷停掉旧会话腾位置（那正是用户报过的 bug） | 同上 |
+| 事件分拣 | 每个实例有稳定 `runnerId`；推给渲染端时带身份封套 `sessionId / runId / generation` | `main/runners.ts` 的 `runtimeOf()` |
+| 渲染端不串台 | `store.applyPush` 做身份闸门：只有 `activeRunnerId === runtime.runId` 才写当前投影，其余进按会话缓存 | `state/store.ts`、`state/session-runtime.ts` |
+
+**改动注意点（最容易静默失效的一处）**
+
+身份这条链有**三个必须一致的落点**：`runners.ts` 产生封套 → `store.applyPush` 判闸门 → `session-runtime.ts` 存缓存。四处里少改一处，事件会被**静默丢弃**（不报错）。
+
+实测证据（`scripts/probe/survey.js`）：同一个实例先后以两个键存在
+
+```
+Object.keys(sessionRuntimes) = ["pending:r1", "01a0a42a-0bdc-76ff-8358-0fa2e8527263"]
+runners[0] = { id:"r1", runId:"r1", … }        // runId 恒等于实例 id
+```
+
+所以 **`sessionId` 不能用来判等值**（启动期是 `pending:<runId>`，就绪后才换成真实 uuid）。
+
+### 2.4 模型与能力探测
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 列模型 | pi 的 `get_available_models` —— 这是**运行实例级**的，与会话无关 | `main/agent.ts` |
+| 能力字段 | 归一化时缺失一律记 `unknown`，**绝不因为字段缺失就判成不支持** | `shared/model-capabilities.ts`（有单测） |
+| 判响应过期 | 用 `runId` 做主键，没有 runId 才退回 `sessionId` | `state/capability-request.ts`（有单测） |
+| 连接恢复后补拉 | `startConnWatch` 在 `starting → ready` 时重拉模型 / 命令 / 会话列表 | `state/store.ts` |
+| 模型选择器 | 挂在**用量条内部**（`.usagebar > .picker-wrap`），不是独立控件 | `Composer.tsx` → `UsageBar.tsx` → `Pickers.tsx` |
+| pi 未就绪时 | **降级渲染**：保留选择器 + 明确空态，不整条 `return null` | `UsageBar.tsx`、`Pickers.tsx` |
+
+**改动注意点**
+
+- 「启动时拉一次、之后再补」这类链路，要在代码里**找到那个"补"的调用点** —— 这里踩过：两处注释互相担保说会补拉，实际都没做，于是模型菜单永远是 0 条。
+- 别用多道「没数据就不渲染」把同一个入口层层拦掉：`UsageBar` 和 `Pickers` 各有一道 `return null`，pi 未就绪时叠加起来整个入口消失，用户连自救的入口都没了。
+
+### 2.5 工具调用的呈现
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 分型渲染 | 按工具种类选壳体（文件改动 / 命令输出 / …），不再一律套终端外壳 | `chat/ToolDetails.tsx` |
+| Codex 风格 | 一条条列出的工具行 + 可折叠的组；默认收起，只展开运行中的那条 | `chat/ToolRow.tsx`、`chat/ToolGroup` |
+| 前后快照 | 写入类工具在执行前后各存一份，差异归属靠这个（`edit` 的参数只是替换片段，不等于 diff） | `main/snapshots.ts`（有单测） |
+| 终端窗口 | 工具输出可调大小的窗口 | `chat/Terminal.tsx` |
+
+### 2.6 推理内容
+
+**怎么实现的**：上游只返回可展示的思考文本时，按**字素**流式放进主流；**限高省略** —— 固定 `max-height: min(32vh, 260px)`，`overflow: hidden`，裁掉开头、`scrollTop` 贴底显示**最新**内容，顶部加 mask 渐隐，给「展开全部 / 收起」出口。
+
+**涉及文件**：`chat/Reasoning.tsx`、`styles/chat.css`（`.reason-body.clip` / `.is-clipped` / `.expanded`）、`styles/tokens.css`（`--reason-max-h`）。
+
+**改动注意点**
+
+- **不引入第二条滚动条**：早期"不设固定高度、不用内部滚动"的方案已废止；改回嵌套滚动会带回"上滚被拽回底部"的问题。
+- 语言：**不注入**"必须用某语言思考"之类的提示；界面语言只由 `languageSystemPrompt()` 生成的一句 `--append-system-prompt` 约束，**永远保留模型返回的原文**。
+- 这条契约被 `scripts/probe/reasoning.js` 钉住了（**44 条断言**），改它探针会红。
+
+### 2.7 文件树、预览与 @ 引用
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 文件树 | 懒加载：一层一次列；带缓存与隐藏项开关 | `main/files.ts`、`toolbar/FileTree.tsx` |
+| 预览 | **只读**，明确不是编辑器 | `toolbar/FilePreview.tsx` |
+| `@` 补齐 | 主进程按 cwd 列目录；光标范围是纯函数（范围**不含** `@` 本身，便于替换） | `main/credentials.ts` 的 `completePath`、`chat/at-query.ts`（有单测） |
+| 拖入文件 | 渲染端拿到的是 `File` 对象，可以是工作区外的**任何**文件 → 必须显式授权 | `main/file-refs.ts` |
+
+**改动注意点**
+
+访问边界是**同一条约束**、分散在**三处**：`main/files.ts`、`main/file-refs.ts`、`main/credentials.ts` 的 `completePath`。三处必须一致是「渲染端只能看见 cwd 以内」，少改一处就等于开了个口子。
+
+`@` 补齐的路径穿越也在这里判，单测在 `test-credentials.mjs`。
+
+### 2.8 内置浏览器与本机 Chrome
+
+四段链路，缺一段都跑不起来：
+
+| 层 | 位置 | 职责 |
+|---|---|---|
+| 主进程控制器 | `main/browser.ts` | 内嵌视图 + 外部 Chrome 代理标签，统一标签栏 / `activeMode` 路由；起一个只监听 127.0.0.1、带 token 的 loopback bridge |
+| 底层 | `main/browser/` | `CDPBridge`（Electron 调试器）与 `RawCdp`（外部 Chrome 的 WebSocket）实现**同一个** `CdpChannel` 接口；`Observer` 出可交互元素表、`ElementRegistry` 管 ref、`InputController` 发输入、`BrowserPolicy` 拦高风险动作 |
+| 原生视图 | 主进程持有 `WebContentsView` | **不是 iframe**，永远盖在渲染层之上 |
+| UI | `components/browser/BrowserSurface.tsx` | 只画工具栏 + 把可见区域坐标同步给主进程 |
+| pi 工具 | `resources/pi-extensions/browser.js` | 只访问 bridge，不碰 Electron 对象 |
+
+**改动注意点**
+
+- **坐标必须乘 `win.webContents.getZoomFactor()`**，否则非 100% 缩放下内置浏览器位置会偏。
+- 抽 `CdpChannel` 接口的理由：内嵌用 Electron debugger，本机 Chrome 必须走原生 WebSocket，两者对上层必须一样。
+- `RawCdp` 之外还有 `main/chrome.ts`（探测/启动本机 Chrome，独立 `--user-data-dir` + 调试端口）和 `main/chrome-profile.ts`（把真实 Chrome 的登录态与历史导入托管 profile）。
+
+### 2.9 子代理
+
+**怎么实现的**：自有的进程管理适配（不装上游扩展）——每个子代理跑一个 `pi --mode rpc`，带并发上限、超时、停止、转录上限，用量不重复计入；**写入隔离**用独立 git worktree（从当前 HEAD 建），差异先汇总、用户确认后再 apply。
+
+**涉及文件**：`main/subagents.ts`、`main/subagent-isolation.ts`（有单测）、`chat/SubagentList.tsx`、`toolbar/SubagentPreview.tsx`。
+
+**改动注意点**：隔离模块只处理文件系统 / Git 边界，**不启动 pi**，也不把差异正文推到渲染端。
+
+### 2.10 凭证、额度与登录
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 写凭证 | 直接读写 pi 的 `auth.json`，让用户在桌面端就能配 key | `main/credentials.ts`（有单测） |
+| ChatGPT 登录 | **桌面端自己发起 OAuth**，参数逐字对齐内置 pi（差一点 pi 就不认这个 token） | `main/oauth.ts` |
+| 额度 | 取额度必须用 **Electron 的 `net.fetch`**，不能用全局 `fetch` | `main/quota.ts` |
+
+**改动注意点**
+
+- 全局 `fetch` 请求 chatgpt.com 会被 Cloudflare 拦（同样的头也拦），所以这里不能用 fetch。
+- 登录只预留：**本地档案不得显示虚假的「已登录 / 已同步」**。订阅制里只有 `openai-codex` 能在应用内登录，其余必须走终端。
+- 凭证路径：便携版是 `<EXE同级>/砚数据/pi-agent/`，否则 `~/.pi/agent/`。
+
+### 2.11 设置、外观与缩放
+
+| 做什么 | 怎么实现的 | 涉及文件 |
+|---|---|---|
+| 桌面端设置 | 只写自己的数据目录，**刻意不写 pi 的 `settings.json`**（那是 TUI 和扩展的领地，改它会污染用户配置） | `main/settings.ts` |
+| 设计令牌 | **先改 `docs/design/DESIGN.md`，再同步** `styles/tokens.css` | `docs/design/DESIGN.md` |
+| 缩放 | 纯计算（DPI 取整）与 electron 部分**分开**，前者才能单测 | `main/zoom-math.ts`（有单测）、`main/zoom.ts` |
+| 动效 | 尊重 `prefers-reduced-motion` | `styles/motion.css` |
+
+**改动注意点**
+
+- grid 弹性列一律 `minmax(0, 1fr)`，否则长内容会撑破布局（`lint-css.mjs` 会拦）。
+- `styles/` 里 `stage1` / `stage2` / `redesign` 这些名字旧**不代表无用**；删除前核对导入顺序与动态类名。
+- 改 CSS 后跑 `npm run typecheck`（含 CSS 约定 + 层叠自检）。
+
+### 2.12 打包与分发
+
+| 项 | 实现 |
+|---|---|
+| asar 内容 | 白名单：`out/**`、`build/icon.png`、`package.json`；排除 `node_modules/**`、`out/test/**`、`**/*.{map,md,ts,tsx,tsbuildinfo}` |
+| 随包资源 | `extraResources`：`resources/pi-runtime/{dist,node_modules,package.json}` + `resources/pi-extensions` |
+| 文档 / 源码 / 脚本 | **不进包**（不在白名单） |
+
+**改动注意点**
+
+- `resources/pi-runtime/node_modules` 必须**单独一条 `from`**：electron-builder 的 filter 会跳过被拷目录**顶层**的 `node_modules`，靠父目录带会让内置 pi 静默丢依赖 —— 症状是开发态全绿、装出来的应用连不上 pi。
+- `files` 里的 `out/**` 是**全收**的：跑过单测再打包会把 `out/test/*.mjs`（30 文件 / 489K 的业务代码副本）带进 asar。已用 `'!out/test/**'` 排除（实测条目 259 → 235）。
+- **打包边界要看产物不要只看配置**：`npx @electron/asar list <解包目录>/resources/app.asar`。
+- `release/砚数据/` 是用户真实数据（只读）。它不会被打包，但**若把 `release/` 整个目录分发出去就会被带走** —— 交付时只挑 `砚-*.exe` / `砚-*.zip` / `SHA256SUMS.txt`。
+
+---
+
+
+## 修改前按需阅读
+
+- 工作区规则：[AGENTS](../AGENTS.md)。
+- 测试与证据：[TESTING](dev/TESTING.md)、[HANDOFF](dev/HANDOFF.md)。
+- 实现陷阱：[MAINTENANCE](dev/MAINTENANCE.md)。
+- 打包与用户数据：[RELEASING](dev/RELEASING.md)。

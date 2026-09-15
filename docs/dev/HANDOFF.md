@@ -1,189 +1,114 @@
 # 开发交接 · 砚
 
-更新：2026-09-13（统一浏览器标签与工作区整理）。本文维护当前约定；旧会话流水账和已失效的方案已清理，历史可从 Git 查看。目录见 [工作目录导览](../WORKSPACE.md)。
+整理日期：2026-09-15。本文是**当前状态与剩余任务的唯一入口**。工程标准看[工程清单](ENGINEERING-CHECKLIST-2026-09-15.md)，架构与依赖看[实施方案](实施方案-2026-09-15.md)。
 
-## 当前产品与已确认边界
+## 接手顺序
 
-- 砚是独立 agent 桌面端，Electron + React + TypeScript；pi 作为 RPC 子进程提供模型循环与工具执行。
-- **任务面板保持现状**（用户本次明确确认）：继续读取会话中的扩展任务清单，不安排重构，不修改用户扩展来改变任务引导。
-- 记忆存储、remember/recall/forget、记忆扩展和提示词注入已移除，不恢复这些模块，也不删除用户遗留数据。
-- 推理内容沿用模型输出，不注入思考语言要求；推理窗口在整个回合结束后折叠。
-- 会话分支按当前左栏与对话消息入口实现。旧的 get_tree 浏览链路曾主动移除，不把它重新列作缺失功能。
-- 深浅主题、设置面板、模型接入 UI、字体 npm 分片依赖及 Windows 打包已经实现，不再作为未开发事项。
-- 登录目前只预留，本地档案不能显示虚假的已登录或同步状态。
+1. 阅读根目录 [AGENTS.md](../../AGENTS.md)，检查 `git status --short`，保留已有改动。
+2. 从下表选择一组任务；用 [PROJECT](../PROJECT.md) 和 [CODE-MAP](CODE-MAP.md) 定位实现。
+3. 按 [TESTING](TESTING.md) 做相应检查，在下表登记证据；打包按 [RELEASING](RELEASING.md)。
 
-## 尚未完成
+## 当前结论与证据
 
-> 2026-09-14 更新：下表仅是旧的发布/账号边界，不能视为全部剩余工作。当前实现缺口和验收事项见 [工作区状态](STATUS-2026-09-14.md)。
+会话运行缓存、实例注册表和多项 UI 已有实现；**方案尚未全部完成**。构建访问错误在后续验证中已不复现，不再作为当前阻塞。下面引用已有记录，本次文档整理未重新执行应用测试。
 
-| 顺序 | 工作 | 当前边界 |
+| 范围 | 最近已有记录（2026-09-15） | 尚不能证明 |
 |---|---|---|
-| 后续 | 发布与账号能力 | 代码签名、macOS/Linux 打包、登录；不属于本次清理范围 |
+| 自动检查 | typecheck、build、单测 524/524；见[自验证报告](自验证报告-2026-09-15.md) | 后续源码改动仍需重跑 |
+| Electron | 自验证报告记录 61 场景通过及修复后回归；runnerselect 已有主进程注册表通过记录 | 完整 A/B 长时执行、全部退出路径和两个并发写入子代理 |
+| 视觉 | 现有截图与窗口测量保留在报告及 [CODE-MAP §11](CODE-MAP.md) | 全部深浅主题、窄矮窗口、缩放和真实模型组合 |
+| 应用与包 | 交接记录中的 launcher、dist:dir、test:packaged 曾通过 | 最终源码对应的安装包、ZIP、升级数据副本和 SHA256 |
+| 限制 | 图像理解、站点登录、签名与跨平台仍有模型或外部条件限制 | 不将界面接线通过视为真实能力通过 |
 
-### 阻塞 / 环境受限（需外部条件）
+具体输出和该轮边界见[自验证报告](自验证报告-2026-09-15.md)。早期阶段记录见[首轮实施记录](../archive/2026-09-15-engineering-first-pass.md)，其中“未开始 / 阻塞”仅代表当时。
 
-- **代码签名**：需要开发者证书，本环境没有；electron-builder 已能打出未签名的安装包/便携版。
-- **macOS 打包**：electron-builder 不能在 Windows 上可靠产出/签名 mac 目标，需要 macOS 机器或 CI。
-- **真实登录**：需要账号后端与协议；目前只有本地档案预留，且不显示虚假登录态。
-  （**模型接入**的登录是另一回事，已经能用了：见下文「ChatGPT 订阅应用内登录」。）
-- **扩展 registerShortcut 映射**：pi 0.85.1 的 RPC 没有相关命令，需上游支持（见下文）。
-- Linux 目标（AppImage/deb）未在本环境验证。
+N06（取消双击项目名重命名）保留首轮实现，未列入新增待办；证据范围见首轮记录，最终集成回归仍需覆盖。
 
-### 已收尾（内置 pi 管理，2026-09-13 本会话）
+## 当前产品边界
 
-- `PiInfo` / `PiProbe` 增加 `source`（内置/系统安装/自定义/环境变量/PATH/shell）、`home`、
-  `bundledAvailable`、`error`。设置「关于」页显示来源、版本、包目录、入口路径，并提供**重新检测**；
-  pi 之前没找到时，重新检测会顺手把 agent 拉起来。缺件时给出「内置缺失 → `npm run vendor:pi`；
-  安装版重装」的修复说明。
-- `vendor:pi:check` 支持 `--if-present`，已接入 `npm run check`（新克隆缺内置运行时跳过而非失败）。
-- 新增 `npm run upgrade:pi`（版本对比 → 必要时提取 → 自检失败给修复清单）；`--check` 只报版本，
-  `--force` 强制重跑。升级后需**重启应用**（版本在进程内缓存）。
-- **Ctrl+Shift+P（上一个模型）**：pi 的 RPC 只有向前的 `cycle_model`，故在 `AgentController.cycleModelBack`
-  里用 `get_available_models` + `set_model` 反向走一项；主进程 `before-input-event` 先拦 Ctrl+Shift+P
-  （必须排在 Ctrl+P 前），统一发 `cycleModelBack` 动作。对齐 pi 默认 `app.model.cycleBackward`。
-  探针 `hotkeys` 已覆盖：真实按键得到 `cycleModelBack → cycleModel → cycleThinking`，双向切换可逆。
+遵循 [AGENTS.md 第五节](../../AGENTS.md)：任务面板保持现状；记忆模块与 get_tree 不恢复；推理限高显示最新内容且保留模型原文；本地档案不冒充登录。工具库只用按钮收放和排序，拖动排序限工具栏内部。Yan 自有账号与 ChatGPT 模型接入登录是两条不同能力。
 
-### 外部浏览器（本机 Chrome）—— 已接入
+## 尚未完成的工作
 
-- 方案：**独立 `--user-data-dir` + 调试端口 + 原生 CDP**。Chrome 136 起默认配置目录会被拒绝开
-  `--remote-debugging-port`；独立 profile 需要用户在其中**登录一次**目标站点（如 ChatGPT）。
-- 分层：
-  - `src/main/browser/CdpChannel.ts`：只定义 `attach/send/screenshot/detach`。Observer / InputController /
-    geometry 改吃这个接口 —— 同一套「观察→ref→点击/输入」逻辑不再绑死 Electron。
-  - `CDPBridge.ts`（Electron `webContents.debugger`）与 `RawCdp.ts`（WebSocket；Node 22 全局 `WebSocket`，
-    不引 puppeteer）是同一接口的两个实现。启动参数 `--remote-allow-origins=*` 不可漏，否则 DevTools 连接被拒。
-  - `src/main/chrome.ts`：探测 Chrome/Chromium/Edge、选空闲端口、拼参数、启动/停止。
-  - `src/main/browser.ts`：内嵌标签与外部 Chrome 代理标签可**同时存在于统一标签栏**；`activeMode` 决定当前控制目标，`parts()` 统一路由 observe/click/type/press/scroll/screenshot，navigate/back/forward/reload 按激活目标分叉。外部标签 ID 使用 `chrome:<targetId>`，避免与内嵌 ID 冲突。
-- 入口：工具栏「Chrome」按钮（`[data-testid="browser-external-chrome"]`）；pi 工具
-  `browser_connect_local_chrome` / `browser_disconnect_local_chrome`（走 loopback `/external/open|close`）。
-- 登录交接：复用已有的 `browser_request_user_control` —— 用户在 Chrome 窗口里登录后恢复 Agent 控制。
-- 验证：`npm run probe:chrome`（无头 Chrome 通道 7 项）、`npm run test:live -- externalchrome`
-  （面板按钮 → 接入 → observe → 断开，全程无头、隔离 profile）。
-- 外部模式支持**标签列表/切换/关闭**（Chrome 页面目标映射为带 `chrome:` 前缀的代理标签，与内嵌标签合并到 `state.tabs`）；关闭最后一个 Chrome 标签或断开连接后恢复当前内嵌标签，连接失败不会清空内嵌页。
-  **前进/后退状态回填**（`Page.getNavigationHistory` 同步到 `canGoBack/canGoForward`，工具栏按钮可用），
-  以及**下载捕获**（`Browser.setDownloadBehavior` + `downloadWillBegin/downloadProgress`，落到系统下载目录
-  并写入 `lastDownload`）。
-- 已知边界：外部 Chrome 只跟踪**当前激活目标**的观察状态；切换 Chrome 代理标签会重建 CDP 连接，之前的 element ref 会失效（需重新 observe）。外部窗口仍是独立 OS 窗口，不做不受 Electron 支持的跨进程原生嵌入。
-  下载捕获不加自动化断言（要页面真的触发下载），归为人工验证项。
+状态含义：**未完成**＝仍缺实现或接入；**部分完成**＝已有实现或检查但未补齐验收；**待视觉验收**＝仍缺目标窗口证据；**外部阻塞**＝需要模型、证书、目标系统或上游接口。
 
-### 其他修复：工具调用栏展开规则（2026-09-13）
+### 一、下一轮应优先处理的 P0/P1 任务
 
-- 用户报：模型一调工具，**整个**工具调用栏（`.tgroup`）就展开。
-- 根因：`ToolGroup` 曾用 `open = running && streaming`，一条在跑就弹开整组。
-- 修法：正在跑 / 排队的工具由 `TurnView` 单独渲染并自动展开详情；已结束的才进
-  `ToolGroup`，默认收起，用户点了才开（手动展开不被自动规则推翻）。
-- 回归：`npm run test:live -- toolgroup`（注入合成回合，不烧 token）。
+| ID / 优先级 | 状态 | 接手任务 | 完成标准与证据 |
+|---|---|---|---|
+| **L02 文件树** / P1 | 部分完成（代码已实现，待真实窗口验收） | 实现已具备：单击只打开只读预览、“加入上下文”独立动作（按钮 / `Alt+Enter` / `A`）、`role=tree/treeitem`、方向键游走、请求绑定 `cwd+generation+projectId` 并校验响应归属、切项目清空缓存并重置 loading、搜索带 requestId 与取消。剩余是取证与边界补充：空目录、无权限、失效路径、截断、排序说明。 | 在真实窗口验证中文/空格路径、切项目竞态、无权限、大目录、窄右栏和浏览器共存；不能只凭 `FileTree.tsx` 存在或静态 CSS 结项。复用/扩展文件树 live 探针。 |
+| **N12 会话运行** / P0 | 部分完成 | 完成 A/B 主会话长时运行矩阵：A 运行时切到 B 并发送，A 继续执行；切回后消息、草稿、队列、模型、统计、cwd 不串；停止、删除、换项目、改语言、退出都只作用于目标实例；同一 cwd 写入冲突要明确拒绝；退出要覆盖保存退出、中断退出、取消和重复退出。 | 渲染端已补按 sessionId/runtime 保存消息、队列、草稿、模型/思考级别、命令和统计，并处理启动期 `runId` 到稳定 `sessionId` 的缓存迁移；仍需真实 Electron 场景覆盖运行中切换、等待输入、失败、未读、退出快照和无残留进程，当前不能据此结项。 |
+| **L03 子代理审阅** / P1 | 部分完成 | 保持写入子任务在独立 worktree、只读任务在受控 cwd；补真实的两个并发写入任务、差异预览、归属、合并、放弃、冲突、失败恢复、超时、停止和退出清理；切换查看项目不能关闭后台子代理；保留未合并差异的可恢复归档。 | 两个写入任务不得污染主工作树；合并/放弃后主树结果可解释；异常结束后不留子进程。当前隔离实现和纯逻辑测试已通过，仍需真实并发窗口/进程证据。 |
+| **L01 发布门槛** / P0/P1 | 部分完成 | 用 `release/砚数据/` 的备份副本做升级读取验证，严禁改原目录；所有功能合入后重新跑 launcher、目录包和包内启动；按实际发布范围生成安装包、便携 ZIP 和 SHA256，并分别记录未签名、平台和证书状态。 | 历史基线中的 `dist:dir` 与 `test:packaged` 已通过，内置 pi 0.85.1、包内路径和扩展加载均正常；尚需最终源码的发布复验、便携数据升级副本、安装包/ZIP/SHA256 和签名/跨平台证据。 |
 
-### ChatGPT 订阅应用内登录（2026-09-15）—— 不再需要回终端
+### 二、已有实现但仍需补真实验收或功能闭环的 P1/P2 任务
 
-用户报的问题：订阅制只能显示 `pi → /login` 命令提示，Plus/Pro 用户必须去终端跑一次。
-现在 **ChatGPT（`openai-codex`）可以在应用内登录**。
+| ID | 当前状态 | 具体剩余工作 |
+|---|---|---|
+| **N01 分组** | 部分完成 | 分组新建/重命名/解散已有实现；仍需确认拖拽排序、重启后的顺序、多个项目分组后的搜索/折叠和窄栏视觉。 |
+| **N02 模型能力** | 部分完成 | 能力快照已区分 unknown / unsupported / 可用，模型菜单已有合成窗口证据；仍需用真实不同上下文容量、思考档位、无思考档位和图像输入模型做切换矩阵，验证快速切换的迟到响应、空档位清理、旧 token 统计不冒充新模型统计。 |
+| **N03 工具详情** | 部分完成 | 默认收起和失败工具入口已有实现；仍需用长输出、并行工具、历史消息、滚动阅读和深浅/窄窗口确认展开状态不抢焦点、不跳动、不出现第二滚动条。 |
+| **N04 推理流** | 部分完成 | 口径已于 2026-09-15 由用户变更：**推理默认展开但限高省略**（`--reason-max-h` = `min(32vh,260px)`，裁掉开头 + scrollTop 贴底显示最新 + 顶部 mask 渐隐 + 「展开全部」出口），原方案「不设固定高度、不用内部滚动」那条作废。代码与探针已按新契约改完；仍需真实窗口覆盖「思考 → 工具 → 思考 → 回复」、长中英文/emoji、上滚看历史、无内容不占位、减少动画模式和深浅/窄窗视觉。 |
+| **N05 项目切换** | 部分完成 | cwd 校验、实例复用/隔离和无效路径反馈已有；仍需验证切回项目恢复最近会话与草稿，文件树/附件相对路径/上下文随项目更新，以及已删除目录、无权限目录的真实反馈。 |
+| **N07 设置收敛** | 部分完成（代码已收敛，待一致性复核） | `StatusTab` 已改为只读诊断（会话/模型/上下文用量/工具·轮次·成本），无可写重复控件；自动压缩只在 `RightPanel` 压缩区、自动重试只在右栏状态区各有一个入口。剩余：逐项走查一遍入口与文案，确认没有隐藏的第二次写入路径。 |
+| **N08 / N13 / N14 / N15 / N17** | 部分完成 | 模型菜单、窄栏标题、mini 项目栏、回收站通知、项目前五项折叠已有代码/探针基础；补正常/窄/矮窗口、125%/150% 缩放、深浅主题、长标题、多项目搜索/重启后的真实截图和交互记录。 |
+| **N09 队列撤回** | 部分完成 | 稳定 queue ID、清空/重排/撤回/插队的串行化已有；仍需用真实 pi 消费边界验证相同文本、刚被消费、连续撤回、并发入队、失败恢复。已被模型接收的插话必须明确显示“已发送，无法撤回”，不能承诺撤销模型影响。 |
+| **N10 自主模式** | 部分完成 | 开关、输入栏边框动效、文字/图标区分已有；补减少动画偏好、关闭瞬间、任务运行中与仅启用状态的真实窗口证据，确认尺寸、点击区域和长文输入不被动画改变。 |
+| **N11 标题** | 部分完成（入口与实现已具备） | `Rail.tsx` 会话菜单已有“重新生成标题”→ `store.regenerateTitle` → 主进程 handle；`title.ts` 已有目标 sessionId、候选生成→采用、手动标题保护与缓存。仍需真实模型场景确认只发送首条/最近用户文本、单次生成锁、失败保留旧标题、显式重试，以及不因切会话/刷新列表重复生成。 |
+| **N16 语言** | 部分完成 | 新 runner 的语言提示和不重启现有会话已有；仍需用实际中英文模型输出验证新会话语言、旧会话不中断、切换后不误停后台任务。 |
+| **N18 命令菜单** | 部分完成 | 本地 `/login`、`/new`、`/compact`、`/model`、`/browser`、`/subagent` 已接入，兼容命令可见但禁用；最新真实探针已覆盖自动刷新、排序、Enter/Tab、`/model`、`/login`。仍需逐命令矩阵：成功/失败反馈、后台作用域、浏览器无参数/带 URL、`/new`/`/compact` 实际动作、中文输入法组合态、同名来源冲突、失联状态、`/panel`/`/footer` 的真实兼容说明，以及运行时十项技能的真实发现/路由。不能把技能目录存在当成技能已接入。 |
+| **N19 @ 引用** | 部分完成 | 裸 `@` 根层菜单、单字符、光标范围、中文/空格/引号/Windows 路径、cwd 身份绑定和越界保护已有；最新 live 已证明裸 `@` 能拿到 20 个根层候选。仍需真实多级目录、同名文件、多引用、句中光标、快速切项目、大目录、符号链接/目录联接、无权限，以及发送后模型确实收到正确引用；同时与 L02 文件树“加入上下文”统一而不自动发送。 |
+| **N20 首次引导** | 待视觉验收 | 隔离首次启动状态下按钮布局、检测/配置回路已有修复和探针；仍需在正常/窄/矮窗口、缩放、深浅主题取得真实截图和点击证据，不重置正式用户的首次启动标记。 |
+| **L04 浏览器边界** | 部分完成 | 默认拒绝、按 origin 临时允许/撤销、网络私网/DNS 策略和纯逻辑测试已有；仍需逐站授权状态的可追溯 UI、真实目标网站登录、Cookie/页面存储说明、真实 Chrome 下载来源展示和不自动打开、恶意 DNS resolver live 验证。不得输出 Cookie 值。 |
+| **L05 变更归属** | 部分完成 | 每轮 responseDetail 的快照、历史 unknown 和界面标识已有；仍需扩展 shell/第三方工具的会话级前后快照，在并发会话共用目录或隔离目录时避免重复认领同一差异，无法可靠归属时显示 unknown。 |
 
-- 实现：`src/main/oauth.ts`。**参数逐字对齐内置 pi 的实现**
-  （`resources/pi-runtime/dist/bundle/chunks/openai-codex.js`）：
-  `client_id=app_EMoamEEZ73f0CkXaXp7hrann`、授权 `auth.openai.com/oauth/authorize`、
-  换 token `/oauth/token`、scope `openid profile email offline_access`、
-  回调 `http://localhost:1455/auth/callback`，以及授权 URL 上那三个附加参数
-  （`id_token_add_organizations` / `codex_cli_simplified_flow` / `originator=pi`）。
-  差一个 pi 就不认这个 token，所以**不要"简化"这些参数**。
-- 流程：起本地回调服务 → `shell.openExternal` 开系统浏览器 → 校 state → 换 token →
-  抽 `chatgpt_account_id`（access token 的 `https://api.openai.com/auth` claim）→
-  **合并**写入 `auth.json` 的 `openai-codex` 键，形状与 pi 完全一致。
-- 登录成功后**重启 pi 子进程**（`restartAgent`，与语言切换复用）：pi 只在启动时读
-  auth.json，不重启会出现「登录成功但模型还是旧的」。重启等当前回合跑完才动，不截断流式输出。
-- 端口 1455 是 OpenAI 侧按 client_id 注册的**固定值**，不能换；被占时给明确报错
-  （提示退回 `pi /login`），不静默失败。
-- 其余订阅制（Claude Pro/Max、GitHub Copilot、xAI、OpenRouter）**仍然只能跑终端**：
-  各家协议/客户端参数不同，不能照搬。pi 另有 device code 流程
-  （`auth.openai.com/codex/device`，无需本地端口）可作无端口回退，尚未接。
-- 回归：`scripts/test-oauth.mjs`（把 `electron.shell` 与 `fetch` 换成桩，不联网不开浏览器，
-  覆盖参数/PKCE 自洽/state 拒绝/换 token 请求体/accountId 提取/auth.json 形状/取消）与
-  `scripts/test-credentials.mjs`（provider 名映射）；`scripts/probe/auth.js` 断言应用内登录按钮，
-  其余订阅制不给按钮。
+### 三、N18/N19 的下一轮最小验收矩阵
 
-### 已知上游限制：扩展快捷键（registerShortcut）
+接手时建议先完成这一组，因为两项共用 Composer、光标状态和文件引用语义：
 
-pi 0.85.1 的 `registerShortcut` **只在交互式 TUI 里生效**，RPC 模式拿不到也触发不了：
+1. **命令**：裸 `/`、说明筛选、超过 12 项滚动、光标回移、已有参数/后文、Enter/Tab/Esc/方向键、中文输入法组合态、同名不同来源、未连接和切项目；接受候选不发送，执行时才进入正确本地/扩展入口。
+2. **文件引用**：裸 `@`、单字、多级目录、中文空格路径、引号路径、同名文件、多引用、句中光标、快速删除/切项目、大目录、权限/符号链接边界；选候选不发送，真实发送后检查模型收到的引用文本和附件列表。
+3. **交叉竞态**：在 A 项目发起补全后立即切到 B，确认旧响应不能打开菜单或覆盖 B；切换命令来源列表时同样丢弃迟到响应。
 
-- `dist/modes/rpc/rpc-mode.js` 的命令 switch 里没有任何 shortcut 相关命令（只有 `get_commands`）；
-- `extensionRunner.getShortcuts()` / `getShortcutDiagnostics()` 只在 `dist/modes/interactive/interactive-mode.js` 被调用；
-- 官方 `docs/rpc.md` 的命令清单里没有列举/触发快捷键的接口。
+### 四、L06 真实能力边界和外部阻塞
 
-因此桌面端无法通用地枚举或调用第三方扩展注册的快捷键。可行路径：
+以下事项不要在接手时误标为“代码未完成”或把 Windows 证据扩大解释：
 
-1. **上游扩展 RPC**（推荐）：pi 增加 `get_shortcuts` + 按命令名调用的接口，桌面端本地映射按键、
-   调用 `executeCommand`。契约干净、可重映射；需改 pi。
-2. **通用 `dispatchKeybinding` RPC**：桌面端把按键发给 pi 自己解析。改动小，但更绑定 TUI 语义。
-3. **桌面端静态映射表**（现状兜底）：只能覆盖已知命令，无法应对动态/第三方扩展。
+- **代码签名**需要开发者证书；当前只能生成未签名 Windows 目录/安装产物。
+- **macOS / Linux** 需要对应构建环境或 CI；Windows 上不能把目标包和签名当成已验证。
+- **扩展 `registerShortcut`** 在 pi 0.85.1 RPC 模式没有枚举/调用接口；等待上游 `get_shortcuts` / 执行接口，不做静态假映射。
+- **Yan 自有账号登录、每日模式、任务面板整体改造**不在本轮；ChatGPT `openai-codex` 应用内模型接入登录是另一条已实现的能力，不要混称为 Yan 账号登录。
+- **Command Code 月度额度**没有账户权威字段前继续标注为估算。
+- 密度三档、已有文件预览、工具分型和主窗口沙盒是保留基线；若没有新需求，不要扩大成字体/图标重设计或记忆系统恢复。
 
-注意：扩展用 `registerCommand` 注册的**命令**已经能通过 `get_commands` 看到，并可用 `/命令` 触发 ——
-受限的只是 `registerShortcut` 注册的快捷键处理器，不要把两者混为一谈。
-上游支持前，不再将其列为可实现待办。
+### 五、全量审计新增缺陷（2026-09-15）
 
-## 内置浏览器当前状态
+对全仓库 19633 个文件做过一次机器审计与代码核对（清点、语法、i18n、IPC、推送、探针、文档链接全部闭合），结论与方案见 [项目全量审计与收尾方案](AUDIT-2026-09-15-项目全量审计与收尾方案.md)。除上表任务外，新登记 9 条清单外问题，**D1–D5 是真实代码缺陷，建议排在 N12/L03 验收之前修**：
 
-- 浏览器运行时在 `src/main/browser.ts`，页面使用共享 `persist:yan-browser` Session 的 `WebContentsView`。
-- `src/main/browser/` 分别负责 CDP、观察、generation-scoped element ref、输入控制和风险策略。
-- Pi 扩展工具为 `browser_open`、`browser_observe`、`browser_click`、`browser_type`、`browser_press`、`browser_scroll`、标签页、截图、下载和用户接管；旧 `browser_navigate` 保留为兼容别名。
-- 任意页面 JavaScript 默认关闭；密码、验证码、Passkey、支付及高风险操作应由 `browser_request_user_control` 交给用户处理。
-- 元素 ref 只在**整篇文档被替换**（`Page.frameNavigated` / `DOM.documentUpdated`）时作废，不再因任意节点增删清空注册表；节点被移除时由 `DOM` 的 detached 报错翻译成 `STALE_ELEMENT`。
-- `browser_click` 会先 `scrollIntoViewIfNeeded` 再**重新测量**包围盒（`src/main/browser/geometry.ts`）；复用观察时的坐标会让离屏元素点到空处。
-- 网页是原生 `WebContentsView`，永远盖在渲染层之上：加载/错误提示只能放在工具栏，且 `.browser-surface` 单列必须固定为 `minmax(0, 1fr)`，否则长文案会把区域撑变形。
-- **原生层坐标换算**：渲染端 `getBoundingClientRect()` 是主窗口的 CSS 像素，而 `WebContentsView.setBounds` 要 DIP，主进程按 `win.webContents.getZoomFactor()` 相乘。界面缩放 ≠ 100% 时漏掉这步，页面会整体偏左上、且比面板窄一圈（缩放越大越明显）。
-- 启动时的自动缩放要在 `ready-to-show` 之后再补一次（`loadURL/loadFile` 会把加载前的 zoom 重置掉）；**不能**在 `did-finish-load` 里同步调 `setZoomFactor`，实测会让渲染进程 `render-process-gone: crashed`。
-- 主进程未捕获异常 / 未处理 Promise 通过 `ch: 'log'` 进右栏日志抽屉，不再弹 Electron 的“A JavaScript error occurred in the main process”。
-- 工具栏的「↗ 在外部浏览器打开」走 `shell.openExternal`（只放行 http/https），内嵌视图无登录态时交给用户自己的浏览器。
-- 右栏 5px 宽度把手会被原生视图遮住，`.rightpanel.browser-mode .browser-viewport` 让开 5px，否则浏览器打开时从页面区域拖不了宽。
-- 内嵌浏览器与用户本机 Chrome 完全隔离（独立 `persist:yan-browser`）；登录态不共享。
-- 回归在 `scripts/probe/browser.js` 与 `scripts/probe/external-chrome.js`；后者覆盖统一标签列表、内外切换、关闭最后一个外部标签后恢复内置页。
-- 实现与后续修复的来龙去脉见归档：[实现](../archive/2026-09-13-browser-implementation.md) · [修复](../archive/2026-09-13-browser-fixes.md)。
+| 编号 | 严重度 | 问题 | 状态 |
+|---|---|---|---|
+| D1 | 高 | 子代理并发槽位在 `await prepareWorkspace` 前未预占，三个并发 `start` 可同时越过上限 | 未修 |
+| D2 | 高 | `finalize()` 的 promise 缓存挡住退出时的 `cleanupReview=true`，已结束的 worktree 不会被归档清理 | 未修 |
+| D3 | 中 | 子代理启动期重读 `this.opts`，准备期间切父会话会让 cwd 与 parentSessionId 来自不同代次 | 未修 |
+| D4 | 中 | “只读”子代理没有工具白名单，`controlled-cwd` 只是不隔离；注释承诺的“上层限制为只读”未实现 | 未修 |
+| D5 | 高 | 复用空闲 runner 跨项目时只改注册表 `cwd`，pi 进程实际 cwd 不变，`new_session` 可能落在旧项目目录 | 未修，需真机确认 |
+| D6 | 工程风险 | 48 个核心新文件（含 10 个源文件、10 个单测）尚未纳入版本管理，误清理即丢失 | 待提交 |
+| D7 | 低 | `scripts/probe/libdrag.js` 已删除但仍在 git 索引 | 未处理 |
+| D8 | 低 | 无渲染端 ErrorBoundary，渲染异常整屏白屏且无重新加载出口 | 未实现 |
+| D9 | 低 | 已被 pi 接收的插话仍显示在“排队中”，主进程队列快照落后于真实消费 | 未实现 |
 
-## 源码与协议边界
+### 六、建议接手顺序
 
-- 主进程入口：src/main/index.ts；pi 协议相关逻辑集中于 protocol.ts、agent.ts、normalize.ts。
-- 渲染端通过 preload 和 shared/ipc.ts 定义的接口调用主进程、消费 MainPush；不要直接 import pi 内部模块。
-- pi 会话沿用 JSONL 格式；快速加载由 session-reader.ts 读取，随后后台切换 pi 会话。
-- 分支 entryId 来自 get_fork_messages，不从 DOM 或归一化消息 id 猜测。
-- 任务面板读取扩展写入的 custom entry；应用不向模型注入任务指令。
-- 主进程快捷键的热路径避免异步重读设置；缩放使用内存中的当前状态。
+1. **L02 + N19**：先把文件树、`@` 补全、加入上下文和真实发送语义统一，并完成项目切换竞态。
+2. **N12 + L03**：用真实 A/B 会话和两个子代理覆盖后台生命周期、退出清理、差异审阅和主树保护。
+3. **N02 + N04 + N07 + N13/N14/N15/N17/N20**：做真实模型/流式/设置入口/视觉矩阵，补正常、窄、矮、深浅和缩放证据。
+4. **N18**：完成逐命令验收矩阵、技能发现边界和中文输入法验收；不为满足数量虚构技能。
+5. **L04 + L05**：补目标网站/真实 Chrome/变更归属证据，保持 Cookie 和账户字段边界。
+6. **L01 最终门槛**：使用数据备份副本验证升级，重新构建最终源码，生成并核对发布范围内的安装包、便携 ZIP 和 SHA256，最后再讨论签名和跨平台。
 
-## 运行与验证
 
-命令以根目录 package.json 为准，不在交接文档固定测试数量或重复宣称历史结果是当前通过状态。
+## 更新状态的方法
 
-| 命令 | 用途 |
-|---|---|
-| npm run launch / npm run launch:dev | 普通启动 / 开发启动 |
-| npm run typecheck | 主进程与界面类型检查、CSS 约定检查 |
-| npm run build | 构建 out/ |
-| npm run test:unit | 单元测试，先构建 |
-| npm run check | 类型、构建、单测、设计测量和配置中的真实应用场景 |
-| npm run test:live -- 场景名 | 按需验收真实应用 |
-| npm run vendor:pi / npm run vendor:pi:check | 提取 / 校验内置运行时（check 支持 `--if-present`） |
-| npm run upgrade:pi | 对比版本并在需要时重提取 + 自检（`--check` 只报版本，`--force` 强制） |
-| npm run probe:chrome | 外部 Chrome 通道冒烟（无头启动 + CDP 观察/点击；无 Chrome 时跳过） |
-| npm run test:live -- externalchrome | 应用内接入本机 Chrome 的端到端（无头 + 隔离 profile） |
-| npm run dist / npm run dist:check | Windows 打包 / 解包产物验收 |
+在对应任务行链接证据，按[工程清单第 6 节](ENGINEERING-CHECKLIST-2026-09-15.md)补齐：**实现 / 自动检查 / 真实运行 / 视觉验收 / 应用与包 / 剩余限制**。不适用项注明原因；不能仅凭源码、mock、探针 ok 或旧产物勾选完成。
 
-⚠️ 跑任何 Electron 相关命令（`test:live` / `measure:design` / `dist:check`）之前，确保环境里没有
-`ELECTRON_RUN_AS_NODE=1` —— pi 运行时会注入它。带着它 `npx electron` 会当纯 Node 跑，
-报 `does not provide an export named 'BrowserWindow'`，看起来像应用启动失败。
-
-真实模型场景 e2e、image、queue 可能消耗额度，按需执行。旧的 memory 测试场景已删除。
-
-## 维护中应保留的经验
-
-- 测试用 YAN_USER_DATA、YAN_SESSIONS_DIR、YAN_DATA_DIR、YAN_PI_DIR 隔离用户数据和凭证；不要在真实目录造测试数据。pi 的会话目录还需通过启动参数正确传入。
-- 测试按 fixture 路径标识定位会话，不依赖会被模型重写的标题。面板状态、缩放、引导层需明确初始化；用条件轮询代替固定等待。
-- 布局测量等待几何稳定；滚动定位避免 smooth 被重渲染取消。跨组件拖拽监听 window，结束后清理监听。
-- 设计令牌先改 [DESIGN.md](../design/DESIGN.md)，再同步 tokens.css；grid 的弹性列用 minmax(0,1fr)，避免长内容撑破布局。
-- styles/ 中的 stage1、stage2、redesign 等仍按顺序导入；名字旧不等于样式无用，清理需核对覆盖和动态类名。
-- pi 内置运行时搬运其自带 bundle 与必要依赖，不自行改造成单文件：外部包、WASM、worker、运行时读取的素材及动态加载的 jiti 都可能需要独立文件。
-- resources/pi-runtime/ 是生成物，不手改；pi 升版后跑 `npm run upgrade:pi`（等价于重跑 vendor:pi 并自检）。版本信息在进程内缓存，更换运行时后重启应用。自检失败时脚本会打印修复清单；内置运行时不可用时不得打包。
-- electron-builder 的 extraResources 必须把 pi-runtime/node_modules 单独列出，避免打包器静默遗漏依赖。
-- Windows 打包仅附带当前 electron-builder.yml 指定的运行时资源；已不包含 resources/pi/yan-memory.ts。
-- build/icon.ico 与 build/icon.png 是保留资源；.backup 是手工备份，不当缓存清理。
-
-## 文档维护规则
-
-只记录当前决定、可操作待办和可复用经验。历史性能数字、套餐价格、临时工具路径、旧用户数据数量及被后续实现推翻的决策不作为当前事实保留。
+通用排障经验见 [MAINTENANCE](MAINTENANCE.md)，不再向本页追加“本轮已落地”流水账。

@@ -1,41 +1,40 @@
-# 文档索引
+# 项目文档与方案入口
 
-当前清理结果和剩余工作见 [工作区状态（2026-09-14）](dev/STATUS-2026-09-14.md)，合并后的执行顺序见 [后续工作方案（2026-09-14）](dev/WORK-PLAN-2026-09-14.md)。旧方案与历史交接中的待办应与这两份清单和最新源码交叉核对。
+日常接手只读 **[HANDOFF](dev/HANDOFF.md)**；修改某项功能时，再查对应专题。当前状态只在 HANDOFF 维护，日期报告记录当时证据。
 
-工作目录的分类、源码导航、脚本用途及维护标注见 [工作目录导览](WORKSPACE.md)。
+## 按目的查找
 
-| 目录 | 内容 |
-|---|---|
-| [`design/`](design/) | **设计规范与设计稿**。`DESIGN.md` 是**设计令牌的唯一真源**（`styles/tokens.css` 必须与它一致），`prototype.html` 是可交互设计稿 |
-| [`dev/`](dev/) | **开发过程文档**（非用户文档）。`HANDOFF.md` 是跨会话交接文档（需求 / 环境事实 / 踩过的坑），`NEXT-SESSION.md` 是新会话的开场指令，`TESTING.md` 是**测试约定**（含「测试用哪个模型」） |
-| [`archive/`](archive/) | **已完结阶段的工作记录**（目标 / 改动 / 验证 / 边界）。现状以下面 `dev/HANDOFF.md` 为准，这里用于追溯「改动是怎么来的」 |
-
-## 想快速了解这个项目
-
-| 你想知道 | 看哪个 |
-|---|---|
-| 这是什么、怎么跑起来 | [根目录 README](../README.md) |
-| 界面设计为什么长这样 | [`design/DESIGN.md`](design/DESIGN.md) |
-| 颜色 / 字号 / 间距的取值从哪来 | [`design/DESIGN.md`](design/DESIGN.md) §1–2（令牌真源） |
-| pi 的 RPC 协议怎么用 | [`dev/HANDOFF.md`](dev/HANDOFF.md)「源码与协议边界」及 `src/main/protocol.ts` |
-| 为什么**不要**自己做 esbuild 打包 | [`dev/HANDOFF.md`](dev/HANDOFF.md) 「维护中应保留的经验」 |
-| 想打包分发 | 根目录 [`README`](../README.md) 的「打包分发」 + [`electron-builder.yml`](../electron-builder.yml)；坑见 [`dev/HANDOFF.md`](dev/HANDOFF.md) 「维护中应保留的经验」 |
-| 有哪些反复踩的坑 | [`dev/HANDOFF.md`](dev/HANDOFF.md) 「维护中应保留的经验」 |
-| 测试怎么跑、用哪个模型 | [`dev/TESTING.md`](dev/TESTING.md) |
-| 某个功能/修复当时是怎么做的 | [`archive/`](archive/)（按日期与主题索引） |
-| 内置浏览器由哪些文件组成 | [`WORKSPACE.md`](WORKSPACE.md) 「内置浏览器结构」 |
-
-## 设计目录里的脚本
-
-都在 `design/` 下，可以直接跑（不依赖应用）：
-
-| 脚本 | 做什么 | 命令 |
+| 目的 | 唯一负责的文档 | 内容边界 |
 |---|---|---|
-| `check.mjs` | 设计稿静态自检（令牌 / i18n / 禁止项 / 字体 / 图标） | `node docs/design/check.mjs` |
-| `measure-design.mjs` | 量设计稿的布局溢出（要求 Electron） | `npm run measure:design` |
-| `build-icons.mjs` | 从 reicon 拉取并生成完整 sprite（联网） | `node docs/design/build-icons.mjs` |
-| `extract-icons.mjs` | 把设计稿的 sprite 抽成 renderer 用的 TS 模块 | `npm run icons` |
-| `embed-icons.mjs` | 把用到的图标子集内联回设计稿 | `node docs/design/embed-icons.mjs` |
+| 了解和启动产品 | [项目 README](../README.md) | 简介、启动、常用入口 |
+| 接手与排期 | [HANDOFF](dev/HANDOFF.md) | 当前状态、剩余任务、最近证据 |
+| 确定每项做到什么程度 | [工程清单](dev/ENGINEERING-CHECKLIST-2026-09-15.md) | N01–N20 / L01–L06 需求、验收条件、六栏模板 |
+| 理解实施方法 | [实施方案](dev/实施方案-2026-09-15.md) | 会话编排架构、身份和作用域、依赖顺序 |
+| 定位功能实现 | [PROJECT](PROJECT.md) | 功能 → 实现 → 文件 |
+| 定位目录 / 具体文件 | [WORKSPACE](WORKSPACE.md) / [CODE-MAP](dev/CODE-MAP.md) | 目录分类 / 文件职责与联动 |
+| 执行测试 | [TESTING](dev/TESTING.md) | 命令、模型配置、隔离与证据边界 |
+| 构建发布与备份 | [RELEASING](dev/RELEASING.md) | 产物、用户数据、发布检查 |
+| 排查常见实现问题 | [MAINTENANCE](dev/MAINTENANCE.md) | 可复用经验，无进度流水账 |
+| 修改设计 | [DESIGN](design/DESIGN.md) | 设计令牌与视觉规范 |
+| 查历史证据 | [阶段索引](archive/README.md) | 当时方案、测试报告和限制 |
+| 查这一次的全量审计 | [项目全量审计与收尾方案](dev/AUDIT-2026-09-15-项目全量审计与收尾方案.md) | 文件清点、完成/未完成分类、新增缺陷与实施方案 |
 
-> `design/archive/` 放旧设计稿与一次性修复脚本，平时不需要跑。
-> 顶层的 [`archive/`](archive/) 放开发过程的阶段记录，入口见 [`archive/README.md`](archive/README.md)。
+## 当前方案的关系
+
+**HANDOFF（先做什么）→ 工程清单（验什么）→ 实施方案（怎么做）→ PROJECT / CODE-MAP（改哪里）。**
+
+- N12 会话运行是项目切换、定向队列、语言、命令及子代理生命周期的基础。
+- L02 与 N19 共用文件引用语义；N18 与 N19 共用输入补全和项目切换竞态验收。
+- 功能完成后统一进入 L01 发布门槛，不能用历史包结果替代最终源码验收。
+- 旧 STATUS / WORK-PLAN 仅保留历史用途；文件带日期不代表内容全部作废，工程清单的验收条件仍有效。
+
+## 维护规则
+
+1. README 保持短入口；不要加入排障经过、测试数量和完整文件树。
+2. 当前待办只改 HANDOFF；工程清单只改需求、验收条件与证据链接。
+3. 实施方案描述目标，PROJECT 描述已有实现，两者不可混称“已完成”。
+4. 测试结果带日期和适用范围；完整日志、截图归验证报告，不复制到每份文档。
+5. 历史记录不作当前指令；保留截图、原始证据和仍被引用的路径。
+6. 自动生成的 [CSS 令牌清单](design/CSS-令牌清单.md) 与 [样式归属表](design/CSS-归属表.md) 不手工精简；设计令牌先改 DESIGN 再同步代码。
+
+新会话可使用 [NEXT-SESSION](dev/NEXT-SESSION.md) 的简短开场说明。AI 必须遵守的工作区规则集中在根目录 [AGENTS.md](../AGENTS.md)。
