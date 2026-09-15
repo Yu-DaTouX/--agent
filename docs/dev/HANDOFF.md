@@ -101,6 +101,7 @@ N06（取消双击项目名重命名）保留首轮实现，未列入新增待�
 | D8 | 低 | 无渲染端 ErrorBoundary，渲染异常整屏白屏且无重新加载出口 | 未实现 |
 | D9 | 低 | 已被 pi 接收的插话仍显示在“排队中”，主进程队列快照落后于真实消费 | 未实现 |
 | **D10** | 低 | 模型菜单“思考强度”在无可选档位时同一句提示重复显示两次（`.mt-head-level` 与 `.mt-capability-note` 条件完全相同）；`Pickers.tsx` | 未修（P2-8） |
+| **D11** | 高 | 支持推理的模型拿不到思考档位：pi 的 `get_state` 不返回 `availableThinkingLevels`，而 `setStateFrom` 把它当唯一来源 → 每条 state 推送都把档位重置成 unknown（真实模型 `commandcode/deepseek/deepseek-v4.1-flash` 上游实际返回 5 档） | **已修**（`resolveThinkingLevels` + 首次连接/`model_change` 补拉；单测 5 条 + live 探针 `thinking-levels`） |
 
 ### 七、待用户确认的设计方案（未动代码）
 
